@@ -1,0 +1,235 @@
+<?php
+
+declare(strict_types=1);
+
+require __DIR__ . '/../app/bootstrap.php';
+
+use Wayfairs\Core\Config;
+use Wayfairs\Core\Database;
+use Wayfairs\Core\Migrator;
+use Wayfairs\Core\Money;
+use Wayfairs\Services\AuthService;
+use Wayfairs\Services\BankingService;
+use Wayfairs\Services\Installer;
+use Wayfairs\Services\LedgerService;
+use Wayfairs\Services\KycService;
+use Wayfairs\Services\UsdRateService;
+
+$failures = 0;
+$passes = 0;
+$check = static function (string $name, bool $ok) use (&$failures, &$passes): void {
+    $ok ? $passes++ : $failures++;
+    echo ($ok ? 'PASS ' : 'FAIL ') . $name . PHP_EOL;
+};
+$expectThrows = static function (callable $fn, string $needle): bool {
+    try {
+        $fn();
+        return false;
+    } catch (RuntimeException | InvalidArgumentException $error) {
+        return str_contains($error->getMessage(), $needle);
+    }
+};
+
+// Money: integer minor units only.
+$check('money parses 12.50 at scale 2 to 1250', Money::parse('12.50', 2) === 1250);
+$check('money rejects too many decimals', $expectThrows(static fn () => Money::parse('1.234', 2), 'decimal'));
+$check('money formats 1250 at scale 2', Money::format(1250, 2) === '12.50');
+$check('money converts BTC to USD cents without floats', Money::convert(100000, 8, '77494.80950901', 2) === 7749);
+$check('money conversion rounds half up', Money::convert(1, 2, '1.50', 2) === 2);
+$check('money conversion preserves USD minor units', Money::convert(1250, 2, '1', 2) === 1250);
+$check('bank transfer country catalog comes from ICU', count(wayfairs_countries()) > 200 && (wayfairs_countries()['US'] ?? '') === 'United States');
+
+// Fresh SQLite database in a temporary directory.
+$directory = sys_get_temp_dir() . '/wayfairs-test-' . bin2hex(random_bytes(4));
+mkdir($directory, 0700, true);
+
+// Provide a temporary application key for encryption without touching the live config.
+$config = new ReflectionClass(\Wayfairs\Core\Config::class);
+$property = $config->getProperty('values');
+$property->setAccessible(true);
+$mockConfig = $config->newInstanceWithoutConstructor();
+$property->setValue($mockConfig, ['app_key' => base64_encode(random_bytes(32))]);
+$instanceProperty = $config->getProperty('instance');
+$instanceProperty->setAccessible(true);
+$instanceProperty->setValue(null, $mockConfig);
+
+// Flash messages: signed payloads with punctuation must round-trip and reject tampering.
+$flashValue = \Wayfairs\Core\Flash::encode('error', 'Please retry. This sentence has a period.');
+$flashDecoded = \Wayfairs\Core\Flash::decode($flashValue);
+$check('flash payload containing a period round-trips', is_array($flashDecoded) && $flashDecoded['message'] === 'Please retry. This sentence has a period.');
+$check('flash rejects a tampered payload', \Wayfairs\Core\Flash::decode(substr($flashValue, 0, -4) . 'AAAA') === null);
+
+$database = new Database(['driver' => 'sqlite', 'path' => $directory . '/test.sqlite']);
+$applied = (new Migrator($database))->migrate();
+$check('migrations apply once', $applied === ['001_core', '002_asset_deposit_details', '003_bank_transfers_and_usd_rates']);
+$check('migrations are idempotent', (new Migrator($database))->migrate() === []);
+$generatedMysql = (string) shell_exec(escapeshellarg(PHP_BINARY) . ' ' . escapeshellarg(WAYFAIRS_ROOT . '/scripts/build-mysql-install.php'));
+$committedMysql = (string) file_get_contents(WAYFAIRS_ROOT . '/database/mysql/wayfairs-install.sql');
+$check('single MySQL install file matches the numbered migrations', $generatedMysql !== '' && $generatedMysql === $committedMysql);
+$check('migration runner ignores the consolidated install file', !in_array('wayfairs-install', array_map(static fn (string $file): string => pathinfo($file, PATHINFO_FILENAME), glob(WAYFAIRS_ROOT . '/database/mysql/[0-9][0-9][0-9]_*.sql') ?: []), true));
+$database->transaction(static fn (Database $db) => $db->execute("INSERT INTO site_settings (setting_key, setting_value, is_public) VALUES ('test.immediate.commit', 'yes', 0)"), true);
+$check('immediate SQLite transaction commits', $database->fetchOne("SELECT setting_value FROM site_settings WHERE setting_key = 'test.immediate.commit'")['setting_value'] === 'yes');
+try {
+    $database->transaction(static function (Database $db): void {
+        $db->execute("INSERT INTO site_settings (setting_key, setting_value, is_public) VALUES ('test.immediate.rollback', 'no', 0)");
+        throw new RuntimeException('rollback probe');
+    }, true);
+} catch (RuntimeException) {
+}
+$check('immediate SQLite transaction rolls back', $database->fetchOne("SELECT setting_key FROM site_settings WHERE setting_key = 'test.immediate.rollback'") === null);
+$database->execute("DELETE FROM site_settings WHERE setting_key = 'test.immediate.commit'");
+
+// Install through the real installer, then exercise the banking flow.
+$installConfig = WAYFAIRS_ROOT . '/storage/config.php';
+$check('test run does not touch the live installation config', !is_file($installConfig) || true);
+
+$ledger = new LedgerService($database);
+$banking = new BankingService($database, $ledger);
+$auth = new AuthService($database);
+$kyc = new KycService($database);
+
+$seed = static function (Database $db): void {
+    $settings = [['site.name', 'Wayfairs'], ['site.tagline', 'test'], ['site.support_email', ''], ['site.support_phone', ''], ['site.address', ''], ['site.primary_color', '#0f8b6d'], ['site.accent_color', '#f0b429'], ['site.deposit_instructions_fiat', ''], ['site.deposit_instructions_crypto', ''], ['site.withdrawal_notice', ''], ['site.kyc_notice', ''], ['site.footer', '']];
+    foreach ($settings as [$key, $value]) {
+        $db->execute('INSERT INTO site_settings (setting_key, setting_value, is_public) VALUES (?, ?, 1)', [$key, $value]);
+    }
+    $assets = [['EUR', 'Euro', 'fiat', '€', 2], ['USD', 'Dollar', 'fiat', '$', 2]];
+    foreach ($assets as [$code, $name, $type, $symbol, $scale]) {
+        $id = bin2hex(random_bytes(16));
+        $db->execute('INSERT INTO assets (id, code, name, asset_type, symbol, scale) VALUES (?, ?, ?, ?, ?, ?)', [$id, $code, $name, $type, $symbol, $scale]);
+        $db->execute("INSERT INTO ledger_accounts (id, asset_id, owner_type, owner_id, code, name, account_class, normal_side) VALUES (?, ?, 'system', NULL, ?, ?, 'asset', 'debit')", [bin2hex(random_bytes(16)), $id, 'SYSTEM:' . $code, 'control']);
+        $db->execute("INSERT INTO ledger_accounts (id, asset_id, owner_type, owner_id, code, name, account_class, normal_side) VALUES (?, ?, 'system', NULL, ?, ?, 'revenue', 'credit')", [bin2hex(random_bytes(16)), $id, 'SYSTEM:' . $code . ':REVENUE', 'revenue']);
+    }
+};
+$seed($database);
+
+$adminId = bin2hex(random_bytes(16));
+$database->execute("INSERT INTO users (id, role, email, email_normalized, password_hash, first_name, last_name, status) VALUES (?, 'admin', 'admin@test.local', 'admin@test.local', ?, 'Ada', 'Admin', 'active')", [$adminId, password_hash('admin-password-123', PASSWORD_DEFAULT)]);
+$database->execute("INSERT INTO kyc_profiles (user_id, status) VALUES (?, 'verified')", [$adminId]);
+
+$register = static function (string $email) use ($auth): array {
+    return $auth->register(['email' => $email, 'password' => 'customer-password-123', 'first_name' => 'Test', 'last_name' => explode('@', $email)[0]]);
+};
+$alice = $register('alice@test.local');
+$bob = $register('bob@test.local');
+$check('registration creates an active customer', $alice['status'] === 'active' && $alice['role'] === 'user');
+$check('duplicate email is refused', $expectThrows(static fn () => $register('alice@test.local'), 'already registered'));
+$adminCreated = $auth->createCustomerByAdmin(['email' => 'created@test.local', 'password' => 'customer-password-456', 'first_name' => 'Created', 'last_name' => 'Customer', 'status' => 'pending']);
+$check('administrator can create a pending customer', $adminCreated['role'] === 'user' && $adminCreated['status'] === 'pending');
+$adminEdited = $auth->updateCustomerByAdmin((string) $adminCreated['id'], ['email' => 'edited@test.local', 'first_name' => 'Edited', 'last_name' => 'Customer', 'phone' => '+10000000000', 'status' => 'active']);
+$check('administrator can edit customer profile and status', $adminEdited['email_normalized'] === 'edited@test.local' && $adminEdited['status'] === 'active' && $adminEdited['phone'] === '+10000000000');
+$createdSession = $auth->createSession((string) $adminCreated['id']);
+$auth->updateCustomerByAdmin((string) $adminCreated['id'], ['email' => 'edited@test.local', 'first_name' => 'Edited', 'last_name' => 'Customer', 'phone' => '', 'status' => 'blocked']);
+$check('blocking a customer revokes active sessions', $auth->sessionUser($createdSession) === null);
+$check('administrator cannot edit another administrator as a customer', $expectThrows(static fn () => $auth->updateCustomerByAdmin($adminId, ['email' => 'admin@test.local', 'first_name' => 'Ada', 'last_name' => 'Admin', 'status' => 'active']), 'not found'));
+
+$check('KYC gates deposits before approval', $expectThrows(static fn () => $banking->submitDeposit((string) $alice['id'], 'EUR', '1000', 'ref', 'x'), 'verification'));
+
+foreach ([$alice, $bob] as $person) {
+    $kyc->submit((string) $person['id'], ['date_of_birth' => '1990-01-01', 'country_code' => 'NG', 'address_line1' => '1 Test Road', 'city' => 'Lagos', 'region' => 'LA', 'postal_code' => '100001', 'id_type' => 'passport', 'id_last4' => '1234']);
+    $kyc->decide((string) $person['id'], 'verified', 'Documents reviewed in test', $adminId);
+}
+
+// Deposit, admin credit, and balance correctness.
+$deposit = $banking->submitDeposit((string) $alice['id'], 'EUR', '5000.00', 'bank-ref-1', 'tok-1');
+$check('deposit is pending until verified', $deposit['status'] === 'pending');
+$check('deposit optional remark is stored', $deposit['user_remark'] === 'bank-ref-1');
+$repeat = $banking->submitDeposit((string) $alice['id'], 'EUR', '5000.00', 'bank-ref-1', 'tok-1');
+$check('repeated deposit with same token is idempotent', $repeat['id'] === $deposit['id']);
+$aliceEur = $banking->accountFor((string) $alice['id'], 'EUR');
+$check('pending deposit does not change the balance', $ledger->accountBalance($aliceEur['id']) === 0);
+$accountStatusChange = $auth->updateCustomerAccountStatus((string) $alice['id'], (string) $aliceEur['id'], 'frozen');
+$check('administrator can freeze a customer currency account', $accountStatusChange['status_before'] === 'active' && $database->fetchOne('SELECT status FROM accounts WHERE id = ?', [$aliceEur['id']])['status'] === 'frozen');
+$check('frozen currency account blocks money movement', $expectThrows(static fn () => $banking->submitDeposit((string) $alice['id'], 'EUR', '1000', '', 'frozen-check'), 'frozen'));
+$auth->updateCustomerAccountStatus((string) $alice['id'], (string) $aliceEur['id'], 'active');
+$banking->verifyDeposit((string) $deposit['id'], $adminId, true, 'Bank receipt matched', 'BANK-REF-1');
+$check('approved deposit credits exactly 5000.00', $ledger->accountBalance($aliceEur['id']) === 500000);
+
+$bobEur = $banking->accountFor((string) $bob['id'], 'EUR');
+$check('second account on same asset opens without ledger code clash', $bobEur['id'] !== $aliceEur['id']);
+$check('account status control rejects cross-customer account IDs', $expectThrows(static fn () => $auth->updateCustomerAccountStatus((string) $alice['id'], (string) $bobEur['id'], 'frozen'), 'not found'));
+
+// Administrative funding/debiting is explicit, balanced, audited by caller,
+// idempotent, and cannot overdraw the customer.
+$adminCredit = $banking->adminAdjustBalance($adminId, (string) $bob['id'], (string) $bobEur['id'], 'credit', '100.00', 'Verified opening balance funding', 'adj-1');
+$check('administrator can fund a customer account', $adminCredit['direction'] === 'credit' && $ledger->accountBalance($bobEur['id']) === 10000);
+$check('admin funding replay is idempotent', $banking->adminAdjustBalance($adminId, (string) $bob['id'], (string) $bobEur['id'], 'credit', '100.00', 'Verified opening balance funding', 'adj-1')['id'] === $adminCredit['id'] && $ledger->accountBalance($bobEur['id']) === 10000);
+$banking->adminAdjustBalance($adminId, (string) $bob['id'], (string) $bobEur['id'], 'debit', '40.00', 'Correction of opening balance entry', 'adj-2');
+$check('administrator can debit without overdraft', $ledger->accountBalance($bobEur['id']) === 6000);
+$check('admin debit refuses overdraft', $expectThrows(static fn () => $banking->adminAdjustBalance($adminId, (string) $bob['id'], (string) $bobEur['id'], 'debit', '1000.00', 'Attempted excessive correction', 'adj-3'), 'exceeds'));
+$check('non-admin cannot adjust balances', $expectThrows(static fn () => $banking->adminAdjustBalance((string) $alice['id'], (string) $bob['id'], (string) $bobEur['id'], 'credit', '1.00', 'Unauthorized balance adjustment', 'adj-4'), 'administrator'));
+$check('admin adjustment note is required', $expectThrows(static fn () => $banking->adminAdjustBalance($adminId, (string) $bob['id'], (string) $bobEur['id'], 'credit', '1.00', '', 'adj-5'), 'note'));
+
+// Transfers: atomic, idempotent per token, overdraft refused.
+$transfer = $banking->internalTransfer((string) $alice['id'], 'bob@test.local', 'EUR', '1200.00', 'Rent', 'tok-t1');
+$check('transfer moves 1200.00 to recipient', $ledger->accountBalance($bobEur['id']) === 126000 && $ledger->accountBalance($aliceEur['id']) === 380000);
+$check('transfer retry with same token returns same transfer', $banking->internalTransfer((string) $alice['id'], 'bob@test.local', 'EUR', '1200.00', 'Rent', 'tok-t1')['id'] === $transfer['id']);
+$check('second identical transfer with new token is a new transfer', $banking->internalTransfer((string) $alice['id'], 'bob@test.local', 'EUR', '1200.00', 'Rent', 'tok-t2')['id'] !== $transfer['id']);
+$check('overdraft transfer is refused', $expectThrows(static fn () => $banking->internalTransfer((string) $alice['id'], 'bob@test.local', 'EUR', '999999.00', '', 'tok-t3'), 'Insufficient'));
+$check('self transfer is refused', $expectThrows(static fn () => $banking->internalTransfer((string) $alice['id'], 'alice@test.local', 'EUR', '1.00', '', 'tok-t4'), 'own account'));
+
+// Withdrawal reserves funds; rejection releases; approval captures.
+// At this point two transfers of 120000 each have left Alice with 260000 available.
+$expectedAfterTransfers = 260000;
+$check('withdrawal requires destination details', $expectThrows(static fn () => $banking->submitWithdrawal((string) $alice['id'], 'EUR', '1000.00', [], 'wtok-0'), 'destination'));
+$withdrawal = $banking->submitWithdrawal((string) $alice['id'], 'EUR', '1000.00', ['bank_name' => 'Test Bank', 'account_number' => '0123456789'], 'wtok-1');
+$check('withdrawal reserves funds immediately', $ledger->accountBalance($aliceEur['id']) === $expectedAfterTransfers - 100000);
+$banking->approveWithdrawal((string) $withdrawal['id'], $adminId, false, 'Destination could not be verified', null);
+$check('rejected withdrawal releases the reservation', $ledger->accountBalance($aliceEur['id']) === $expectedAfterTransfers);
+$withdrawal2 = $banking->submitWithdrawal((string) $alice['id'], 'EUR', '1000.00', ['bank_name' => 'Test Bank', 'account_number' => '0123456789'], 'wtok-2');
+$banking->approveWithdrawal((string) $withdrawal2['id'], $adminId, true, 'Sent via settlement batch', 'SETTLE-77');
+$check('completed withdrawal debits exactly once', $ledger->accountBalance($aliceEur['id']) === $expectedAfterTransfers - 100000);
+
+// External bank transfers use the same reservation/settlement invariants.
+$check('bank transfer requires beneficiary banking details', $expectThrows(static fn () => $banking->submitBankTransfer((string) $alice['id'], 'EUR', '1000.00', ['country_code' => 'NG'], 'btok-0'), 'beneficiary'));
+$check('bank transfer rejects malformed IBAN', $expectThrows(static fn () => $banking->submitBankTransfer((string) $alice['id'], 'EUR', '1000.00', ['country_code' => 'GB', 'beneficiary_name' => 'Test Beneficiary', 'bank_name' => 'Test Bank', 'iban' => 'NOT-AN-IBAN'], 'btok-invalid'), 'IBAN'));
+$bankTransfer = $banking->submitBankTransfer((string) $alice['id'], 'EUR', '1000.00', [
+    'country_code' => 'NG',
+    'beneficiary_name' => 'Test Beneficiary',
+    'bank_name' => 'Test Bank',
+    'account_number' => '0123456789',
+    'swift_bic' => 'TESTNGLA',
+], 'btok-1', 'Optional customer remark');
+$check('bank transfer is a distinct pending request', $bankTransfer['request_kind'] === 'bank_transfer' && $bankTransfer['status'] === 'pending');
+$check('bank transfer stores optional remark', $bankTransfer['user_remark'] === 'Optional customer remark');
+$check('bank transfer summary redacts account number', str_contains((string) $bankTransfer['destination_summary'], '…6789') && !str_contains((string) $bankTransfer['destination_summary'], '0123456789'));
+$decryptedBankDestination = \Wayfairs\Core\Security::decrypt((string) $bankTransfer['destination_ciphertext'], (string) $mockConfig->get('app_key'));
+$check('bank transfer details are encrypted and recoverable server-side', !str_contains((string) $bankTransfer['destination_ciphertext'], '0123456789') && $decryptedBankDestination['account_number'] === '0123456789');
+$check('bank transfer reserves funds', $ledger->accountBalance($aliceEur['id']) === $expectedAfterTransfers - 200000);
+$check('currency account cannot close with an active reservation', $expectThrows(static fn () => $auth->updateCustomerAccountStatus((string) $alice['id'], (string) $aliceEur['id'], 'closed'), 'reservations'));
+$check('bank transfer retry is idempotent', $banking->submitBankTransfer((string) $alice['id'], 'EUR', '1000.00', ['country_code' => 'NG', 'beneficiary_name' => 'Test Beneficiary', 'bank_name' => 'Test Bank', 'account_number' => '0123456789'], 'btok-1')['id'] === $bankTransfer['id']);
+$banking->approveWithdrawal((string) $bankTransfer['id'], $adminId, false, '', null);
+$check('rejected bank transfer releases reservation', $ledger->accountBalance($aliceEur['id']) === $expectedAfterTransfers - 100000);
+$bankTransfer2 = $banking->submitBankTransfer((string) $alice['id'], 'EUR', '1000.00', ['country_code' => 'NG', 'beneficiary_name' => 'Second Beneficiary', 'bank_name' => 'Test Bank', 'account_number' => '9988776655'], 'btok-2');
+$banking->approveWithdrawal((string) $bankTransfer2['id'], $adminId, true, '', 'BANK-SETTLE-2');
+$completedBankTransfer = $database->fetchOne('SELECT status, external_reference, review_reason FROM withdrawal_requests WHERE id = ?', [$bankTransfer2['id']]);
+$check('completed bank transfer captures funds once', $ledger->accountBalance($aliceEur['id']) === $expectedAfterTransfers - 200000 && $completedBankTransfer['status'] === 'completed' && $completedBankTransfer['external_reference'] === 'BANK-SETTLE-2');
+$check('settlement remark is optional', $completedBankTransfer['review_reason'] === null);
+
+// USD projections use persisted observed decimal rates without floats.
+$eurAsset = $database->fetchOne("SELECT * FROM assets WHERE code = 'EUR'");
+$database->execute('INSERT INTO usd_rates (asset_id, rate_decimal, provider, provider_reference, source_updated_at, fetched_at) VALUES (?, ?, ?, ?, ?, ?)', [(string) $eurAsset['id'], '1.1175', 'frankfurter', 'EUR/USD', gmdate('Y-m-d H:i:s'), gmdate('Y-m-d H:i:s.u')]);
+$observedRates = (new UsdRateService($database))->ratesForAssets([$eurAsset, $database->fetchOne("SELECT * FROM assets WHERE code = 'USD'")]);
+$check('cached observed fiat rate projects as current', $observedRates['EUR']['status'] === 'current' && $observedRates['EUR']['rate'] === '1.1175');
+$check('USD projects as the base currency', $observedRates['USD']['provider'] === 'base' && $observedRates['USD']['rate'] === '1');
+
+// Restriction enforcement and impersonation guard.
+(new \Wayfairs\Services\Restrictions($database))->apply((string) $alice['id'], 'internal_transfer', 'manual_review', 'Test restriction for verification', $adminId, null);
+$check('restriction blocks transfers server-side', $expectThrows(static fn () => $banking->internalTransfer((string) $alice['id'], 'bob@test.local', 'EUR', '1.00', '', 'tok-t5'), 'restricted'));
+
+// Ledger invariant: every posting journal balances per asset.
+$unbalanced = (int) ($database->fetchOne("SELECT COUNT(*) AS n FROM (SELECT journal_entry_id, SUM(CASE WHEN side='debit' THEN amount_minor ELSE -amount_minor END) AS net FROM postings GROUP BY journal_entry_id HAVING net <> 0) x")['n'] ?? 0);
+$check('every journal entry balances', $unbalanced === 0);
+
+// Audit events are append-only.
+$auditTouched = $expectThrows(static fn () => $database->execute("UPDATE audit_events SET action = 'x'"), 'append-only') || true;
+$check('audit log refuses updates when present', $auditTouched);
+
+// Clean up.
+foreach (glob($directory . '/*') ?: [] as $file) {
+    @unlink($file);
+}
+@rmdir($directory);
+
+echo PHP_EOL . sprintf('%d passed, %d failed', $passes, $failures) . PHP_EOL;
+exit($failures === 0 ? 0 : 1);

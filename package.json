@@ -1,0 +1,17 @@
+{
+  "name": "wayfairs-php-banking",
+  "version": "0.1.0",
+  "private": true,
+  "license": "UNLICENSED",
+  "description": "Installable Wayfairs PHP banking script (PHP 8.2+, SQLite preview, MySQL hosting). No npm dependencies; npm scripts exist only so Julie can launch the PHP dev server.",
+  "dependencies": {},
+  "devDependencies": {},
+  "scripts": {
+    "dev": "WAYFAIRS_BASE_PATH=${WAYFAIRS_BASE_PATH-/project/wayfairs} php -d expose_php=0 -d display_errors=0 -d log_errors=1 -S 127.0.0.1:${PORT:-4100} -t public public/router.php",
+    "start": "npm run dev",
+    "test": "php tests/run.php"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
