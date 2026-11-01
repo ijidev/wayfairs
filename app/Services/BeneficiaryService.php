@@ -112,6 +112,8 @@ final class BeneficiaryService
         if ($this->activeFor($ownerKey, $route, $identifier) !== null) {
             throw new RuntimeException('This beneficiary is already saved.');
         }
+        // The database no longer enforces uniqueness itself, so a second save
+        // that slips through the check above is still rejected cleanly.
         $nickname = $this->nickname((string) ($input['nickname'] ?? ''), (string) $clean['beneficiary_name']);
         $details = array_intersect_key($clean, array_flip(['iban', 'account_number', 'swift_bic', 'routing_code', 'bank_address', 'beneficiary_address']));
         $id = Security::uuid();

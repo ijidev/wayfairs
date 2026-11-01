@@ -15,13 +15,10 @@ CREATE TABLE saved_beneficiaries (
   identifier_last4 VARCHAR(4) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
   details_ciphertext LONGTEXT NOT NULL,
   status ENUM('active','archived') NOT NULL DEFAULT 'active',
-  active_key VARCHAR(120) CHARACTER SET ascii COLLATE ascii_bin
-    GENERATED ALWAYS AS (CASE WHEN status = 'active' THEN CONCAT(owner_key, ':', identifier_hash) ELSE NULL END) STORED,
   created_by CHAR(36) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
   created_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
   updated_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6) ON UPDATE CURRENT_TIMESTAMP(6),
   CONSTRAINT saved_beneficiaries_owner_fk FOREIGN KEY (owner_user_id) REFERENCES users(id) ON DELETE RESTRICT,
   CONSTRAINT saved_beneficiaries_creator_fk FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE RESTRICT,
-  UNIQUE KEY saved_beneficiaries_active_identifier_uq (active_key),
   KEY saved_beneficiaries_owner_idx (owner_key, status)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

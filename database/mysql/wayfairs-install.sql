@@ -541,14 +541,11 @@ CREATE TABLE saved_beneficiaries (
   identifier_last4 VARCHAR(4) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
   details_ciphertext LONGTEXT NOT NULL,
   status ENUM('active','archived') NOT NULL DEFAULT 'active',
-  active_key VARCHAR(120) CHARACTER SET ascii COLLATE ascii_bin
-    GENERATED ALWAYS AS (CASE WHEN status = 'active' THEN CONCAT(owner_key, ':', identifier_hash) ELSE NULL END) STORED,
   created_by CHAR(36) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
   created_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
   updated_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6) ON UPDATE CURRENT_TIMESTAMP(6),
   CONSTRAINT saved_beneficiaries_owner_fk FOREIGN KEY (owner_user_id) REFERENCES users(id) ON DELETE RESTRICT,
   CONSTRAINT saved_beneficiaries_creator_fk FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE RESTRICT,
-  UNIQUE KEY saved_beneficiaries_active_identifier_uq (active_key),
   KEY saved_beneficiaries_owner_idx (owner_key, status)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
@@ -559,4 +556,4 @@ INSERT INTO schema_migrations (version, checksum, applied_at) VALUES
     ('003_bank_transfers_and_usd_rates', '11b64eadc10a767c764dc4447384e5914dea97fc09890f91eda62597f6b3f5a9', UTC_TIMESTAMP(6)),
     ('004_bill_payments_and_open_limits', '4fda0fa746fe5c15e257b651bc68c284c44a6a98f16ca9a208235f8b05a5b72c', UTC_TIMESTAMP(6)),
     ('005_flight_requests', '58d69c73fbcb972320ea7da2d5cb318669c8065b56baa714aa39058a537be8cc', UTC_TIMESTAMP(6)),
-    ('006_beneficiaries', '666910da50905d190ae8b7a990376ef29bb37cf945374df1d00c28dee6d11dd5', UTC_TIMESTAMP(6));
+    ('006_beneficiaries', 'b60911b44ed0a4cc2ff656625bb6a63c4f4f3c0034c1f2d12dd1b47ace68ef1b', UTC_TIMESTAMP(6));

@@ -19,5 +19,5 @@ CREATE TABLE saved_beneficiaries (
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL
 ) STRICT;
-CREATE UNIQUE INDEX saved_beneficiaries_active_identifier_idx ON saved_beneficiaries(owner_key, identifier_hash) WHERE status = 'active';
+CREATE INDEX saved_beneficiaries_identifier_idx ON saved_beneficiaries(owner_key, identifier_hash);
 CREATE INDEX saved_beneficiaries_owner_idx ON saved_beneficiaries(owner_key, status);
