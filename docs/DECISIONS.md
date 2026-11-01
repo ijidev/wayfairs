@@ -84,3 +84,31 @@ The standalone publication is prepared as a clean snapshot so ignored runtime
 configuration, databases, sessions, backups, and prior preview credentials do
 not enter public history. The project carries an explicit all-rights-reserved
 license; public GitHub visibility alone grants no reuse rights.
+
+## WDR-013 — Support both document-root layouts, with deny rules as the default
+
+Shared hosting often refuses to move a domain's document root, so the entry
+point must survive `public_html/` being the project root. The repository ships
+a root `.htaccess` front controller plus a root `index.php` shim, and a deny
+`.htaccess` in `app/`, `config/`, `database/`, `docs/`, `scripts/`, `storage/`,
+and `tests/`. Pointing the document root at `public/` remains the recommended
+layout, in which those root files are outside the web root and inert.
+
+Consequences worth recording, because they are not obvious:
+
+- A rewritten request enters `public/.htaccess`, and a child `.htaccess` takes
+  over rewriting for its own subtree. The parent never sees `/public/...`, so
+  the `/public` to clean-URL redirect must live in `public/.htaccess`. Verified
+  by request tracing on a real Apache 2.4.58 instance; the parent-only version
+  silently left `/public` in URLs.
+- Directory listing was possible only because the document root had no
+  `.htaccess`; `Options -Indexes` plus the rewrite fallback removes it, so the
+  fix is not merely cosmetic. `storage/config.php`, `storage/*.sqlite`, and the
+  executable `tests/run.php` were previously downloadable, which is a
+  disclosure problem, so `docs/DEPLOYMENT.md` documents rotation steps.
+- `HEAD` now routes to `GET` handlers with the body discarded. Without it every
+  uptime monitor and `curl -I` saw 404, which would have made the documented
+  verification matrix lie about a healthy deployment.
+- The deployment guards (`root shim exists`, deny rules present, indexes off,
+  `/public` canonicalisation) are asserted in `tests/run.php` because a missing
+  dotfile during upload re-opens the exposure silently.

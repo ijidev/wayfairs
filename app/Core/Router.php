@@ -25,8 +25,11 @@ final class Router
 
     public function match(Request $request): ?array
     {
+        // HEAD is a GET without a response body, so it must reach the same
+        // handlers; uptime monitors and `curl -I` otherwise see 404.
+        $method = $request->method() === 'HEAD' ? 'GET' : $request->method();
         foreach ($this->routes as $route) {
-            if ($route['method'] !== $request->method()) {
+            if ($route['method'] !== $method) {
                 continue;
             }
             $names = [];

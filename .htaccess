@@ -1,0 +1,47 @@
+# Wayfairs — front controller for a document root that is the project root.
+#
+# Use this file only on shared hosting where the account's document root is
+# public_html/ and you cannot repoint it at public/. It makes the site answer at
+# the domain root and denies HTTP access to application code, the database, and
+# stored sessions.
+#
+# The recommended deployment is still to point the domain at public/ and not
+# need any of this; see docs/DEPLOYMENT.md.
+
+Options -Indexes -MultiViews
+DirectoryIndex index.php
+
+<IfModule mod_rewrite.c>
+  RewriteEngine On
+
+  # 1. Application code, data, and tooling are never web-readable.
+  RewriteRule ^(?:app|config|database|docs|scripts|storage|tests|vendor|node_modules)(?:/|$) - [F,L,NC]
+
+  # 2. No dotfiles (.git, .env, .htaccess); keep ACME challenges working.
+  RewriteRule (^|/)\.(?!well-known(?:/|$)) - [F,L]
+
+  # 3. No repository metadata served from the document root.
+  RewriteCond %{THE_REQUEST} \s/+(?:README|LICENSE|AGENTS|CHANGELOG|package|package-lock)[^\s]*\s [NC]
+  RewriteRule . - [F,L]
+
+  # 4. Canonicalise an external /index.php to the site root.
+  #    (/public/... is canonicalised by public/.htaccess: a child .htaccess
+  #    takes over rewriting for its own subtree, so this file never sees it.)
+  RewriteCond %{THE_REQUEST} \s/+index\.php(?:\?[^\s]*)?\s [NC]
+  RewriteRule ^index\.php$ / [R=301,L,NE]
+
+  # 6. Serve real static files that live under public/.
+  RewriteCond %{DOCUMENT_ROOT}/public/$1 -f
+  RewriteRule ^(.*)$ public/$1 [L]
+
+  # 7. Everything else reaches the front controller.
+  RewriteCond %{REQUEST_FILENAME} !-f
+  RewriteRule ^ index.php [QSA,L]
+</IfModule>
+
+<IfModule mod_headers.c>
+  Header always unset X-Powered-By
+  Header always set X-Content-Type-Options "nosniff"
+  Header always set Referrer-Policy "no-referrer"
+  Header always set X-Frame-Options "DENY"
+</IfModule>

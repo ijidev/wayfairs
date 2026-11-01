@@ -75,15 +75,37 @@ environment.
 
 ## Install
 
-1. Upload the project outside the public web root when possible and point the
-   domain/subdomain document root to `public/`.
+Two document-root layouts work; see [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md)
+for the cPanel and shared-hosting walkthrough and the verification commands.
+
+**A. Document root = `public/`** (recommended)
+
+1. Upload the project outside the web root and point the domain/subdomain
+   document root at `public/`.
 2. Make `storage/` writable by the PHP process but not publicly accessible.
-3. Open `/install` and provide the site, administrator, asset, and database
-   settings. The installer writes `storage/config.php` with mode 0600 where the
-   filesystem supports it.
-4. Delete/disable installer access automatically occurs after successful setup.
-5. Sign in as the administrator and complete **Admin → Site Info**, asset,
+3. Open `https://your-domain/install`.
+
+**B. Document root = project root** (for hosts that cannot move it)
+
+1. Upload the whole project into `public_html/` with hidden files visible, so
+   the shipped `.htaccess` files arrive. The root `.htaccess` + `index.php` send
+   every request into `public/` and deny `app/`, `config/`, `database/`,
+   `docs/`, `scripts/`, `storage/`, and `tests/` over HTTP.
+2. Leave **Base path** empty at `/install`. With the shipped rules, `/public/...`
+   and `/index.php` redirect to the clean URL.
+3. If unreachable paths return files instead of `403`, stop: the host is
+   ignoring `.htaccess` and Layout A is required.
+
+**Either layout, then**
+
+1. Provide the site, administrator, and database settings at `/install`. The
+   installer writes `storage/config.php` with mode 0600 where the filesystem
+   supports it, and disables itself afterwards.
+2. Sign in as the administrator and complete **Admin → Site Info**, asset,
    deposit-instruction, and operating-limit configuration.
+
+If the site was ever reachable through layout B before these rules existed,
+read the exposure and rotation steps in `docs/DEPLOYMENT.md` first.
 
 ## Local development
 

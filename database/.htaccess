@@ -1,0 +1,9 @@
+# Deny every direct web request. PHP reads these files from disk; the web
+# server must never serve or execute them.
+<IfModule mod_authz_core.c>
+  Require all denied
+</IfModule>
+<IfModule !mod_authz_core.c>
+  Order allow,deny
+  Deny from all
+</IfModule>

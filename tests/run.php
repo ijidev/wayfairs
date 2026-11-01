@@ -59,6 +59,33 @@ $flashDecoded = \Wayfairs\Core\Flash::decode($flashValue);
 $check('flash payload containing a period round-trips', is_array($flashDecoded) && $flashDecoded['message'] === 'Please retry. This sentence has a period.');
 $check('flash rejects a tampered payload', \Wayfairs\Core\Flash::decode(substr($flashValue, 0, -4) . 'AAAA') === null);
 
+// HEAD reaches GET handlers so uptime monitors and `curl -I` do not see 404.
+$headRouter = new \Wayfairs\Core\Router();
+$headRouter->get('/probe', static fn (): string => 'ok');
+$_SERVER['REQUEST_URI'] = '/probe';
+$_SERVER['REQUEST_METHOD'] = 'HEAD';
+$headRoute = $headRouter->match(new \Wayfairs\Core\Request($mockConfig));
+unset($_SERVER['REQUEST_METHOD']);
+$_SERVER['REQUEST_URI'] = '/';
+$check('HEAD requests match GET routes', $headRoute !== null);
+
+// Deployment guards: both document-root layouts must stay safe on shared hosting.
+$projectRoot = dirname(__DIR__);
+$rootHtaccess = (string) @file_get_contents($projectRoot . '/.htaccess');
+$publicHtaccess = (string) @file_get_contents($projectRoot . '/public/.htaccess');
+$check('public front controller exists', is_file($projectRoot . '/public/index.php'));
+$check('root shim forwards to the public front controller', str_contains((string) @file_get_contents($projectRoot . '/index.php'), 'public/index.php'));
+$check('root .htaccess disables directory indexes', str_contains($rootHtaccess, 'Options -Indexes'));
+$check('root .htaccess blocks application directories', str_contains($rootHtaccess, 'app|config|database|docs|scripts|storage|tests'));
+$check('root .htaccess routes unknown paths to a front controller', str_contains($rootHtaccess, 'RewriteRule ^ index.php'));
+$denyFiles = [];
+foreach (['app', 'config', 'database', 'docs', 'scripts', 'storage', 'tests'] as $directoryName) {
+    $denyFiles[$directoryName] = (string) @file_get_contents($projectRoot . '/' . $directoryName . '/.htaccess');
+}
+$allDenied = $denyFiles !== [] && array_filter($denyFiles, static fn (string $rules): bool => str_contains($rules, 'Require all denied')) === $denyFiles;
+$check('every internal directory ships a deny rule', $allDenied && count($denyFiles) === 7);
+$check('public .htaccess canonicalises /public URLs', str_contains($publicHtaccess, 'THE_REQUEST') && str_contains($publicHtaccess, 'public'));
+
 $database = new Database(['driver' => 'sqlite', 'path' => $directory . '/test.sqlite']);
 $applied = (new Migrator($database))->migrate();
 $check('migrations apply once', $applied === ['001_core', '002_asset_deposit_details', '003_bank_transfers_and_usd_rates']);

@@ -37,6 +37,11 @@ session_set_cookie_params([
 session_start();
 $_SESSION['csrf_token'] ??= Security::token(32);
 
+// HEAD must produce the same status and headers as GET with no body.
+if (strtoupper((string) ($_SERVER['REQUEST_METHOD'] ?? 'GET')) === 'HEAD') {
+    ob_start(static fn (string $buffer): string => '');
+}
+
 if (!$config->installed()) {
     if ($request->path() !== '/install') {
         Response::redirect('/install');

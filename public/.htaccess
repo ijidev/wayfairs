@@ -3,6 +3,14 @@ DirectoryIndex index.php
 
 <IfModule mod_rewrite.c>
     RewriteEngine On
+
+    # Canonicalise an external /public/... request to the clean URL.
+    # This rule lives here because a child .htaccess takes over rewriting for
+    # its own subtree, so the document-root .htaccess never sees these paths.
+    # The THE_REQUEST guard keeps internal rewrites from looping.
+    RewriteCond %{THE_REQUEST} \s/+(?:[^\s?]*/)?public(?:/[^\s?]*)?\s [NC]
+    RewriteRule ^(.*)$ /$1 [R=301,L,NE]
+
     RewriteCond %{REQUEST_FILENAME} !-f
     RewriteCond %{REQUEST_FILENAME} !-d
     RewriteRule ^ index.php [QSA,L]
