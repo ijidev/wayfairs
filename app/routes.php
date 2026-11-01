@@ -45,8 +45,9 @@ return function (Router $router, Database $database): void {
         } catch (RuntimeException | InvalidArgumentException $error) {
             Flash::put('error', $error->getMessage());
         } catch (Throwable $error) {
-            error_log('[wayfairs] ' . $error::class . ': ' . $error->getMessage() . ' in ' . $error->getFile() . ':' . $error->getLine());
-            Flash::put('error', 'That did not complete. Please check the details and try again.');
+            $reference = Context::requestId();
+            error_log(sprintf('[wayfairs] request=%s %s: %s in %s:%d', $reference, $error::class, $error->getMessage(), $error->getFile(), $error->getLine()));
+            Flash::put('error', 'That did not complete. Please try again. Reference: ' . $reference);
         }
         Response::redirect($failure);
     };

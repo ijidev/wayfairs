@@ -125,6 +125,7 @@ final class BankingService
 
     public function submitBankTransfer(string $userId, string $assetCode, string $amount, array $destination, string $idempotencyToken, string $remark = '', string $route = '', string $purpose = 'transfer'): array
     {
+        Security::assertServerReady();
         $account = $this->accountFor($userId, $assetCode);
         $asset = $account['asset'];
         $this->guard($userId, $account, 'fiat_withdrawal');

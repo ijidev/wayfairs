@@ -42,8 +42,19 @@ final class Security
         return $hash;
     }
 
+    public static function assertServerReady(): void
+    {
+        if (!function_exists('sodium_crypto_secretbox')) {
+            throw new RuntimeException('This server is missing the PHP sodium extension, so bank details cannot be stored securely. Ask your host to enable it.');
+        }
+        if (!function_exists('mb_substr')) {
+            throw new RuntimeException('This server is missing the PHP mbstring extension. Ask your host to enable it.');
+        }
+    }
+
     public static function encrypt(array $value, string $encodedKey): string
     {
+        self::assertServerReady();
         $key = base64_decode($encodedKey, true);
         if (!is_string($key) || strlen($key) !== SODIUM_CRYPTO_SECRETBOX_KEYBYTES) {
             throw new RuntimeException('Application encryption key is invalid.');
