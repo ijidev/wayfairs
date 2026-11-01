@@ -19,7 +19,7 @@ $restrictionCount = count($restrictions);
 
 <section class="content-grid">
   <article class="card static">
-    <div class="panel-head"><div><h2>Capability restrictions</h2><p>Restrictions are enforced by the backend before protected actions execute.</p></div><span class="pill <?= $restrictionCount > 0 ? 'bad' : 'good' ?>"><?= $restrictionCount ?> active</span></div>
+    <div class="panel-head"><div><h2>Capability restrictions</h2><p>Restrictions stop the affected actions on your account until they are lifted.</p></div><span class="pill <?= $restrictionCount > 0 ? 'bad' : 'good' ?>"><?= $restrictionCount ?> active</span></div>
     <?php if ($restrictions === []): ?>
       <div class="status-check"><span class="status-check-icon"><?= wayfairs_icon('check') ?></span><span class="status-check-copy"><strong>No active restrictions</strong><span>No capability restriction row currently blocks this account.</span></span></div>
     <?php else: ?>

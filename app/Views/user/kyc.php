@@ -10,7 +10,7 @@ $fullName = trim((string) ($user['first_name'] ?? '') . ' ' . (string) ($user['l
 $initials = mb_strtoupper(mb_substr((string) ($user['first_name'] ?? 'U'), 0, 1) . mb_substr((string) ($user['last_name'] ?? ''), 0, 1));
 ?>
 <header class="page-header">
-  <div class="page-heading"><span class="page-icon"><?= wayfairs_icon('verification') ?></span><div class="page-heading-copy"><span class="page-kicker">Account readiness</span><h1>Identity verification</h1><p>Submit the minimum identity details required for the manual review workflow.</p></div></div>
+  <div class="page-heading"><span class="page-icon"><?= wayfairs_icon('verification') ?></span><div class="page-heading-copy"><span class="page-kicker">Account readiness</span><h1>Identity verification</h1><p>Submit the identity details we need to verify your account.</p></div></div>
   <div class="page-actions"><?= wayfairs_pill('kyc ' . $status) ?></div>
 </header>
 
@@ -29,7 +29,7 @@ $initials = mb_strtoupper(mb_substr((string) ($user['first_name'] ?? 'U'), 0, 1)
       <div class="form-intro"><h2><?= $status === 'verified' ? 'Verification approved' : 'Review in progress' ?></h2><p>Your submitted details are locked while this status is active.</p></div>
       <div class="status-checklist">
         <div class="status-check"><span class="status-check-icon"><?= wayfairs_icon('check') ?></span><span class="status-check-copy"><strong>Details submitted</strong><span><?= e(wayfairs_datetime($profile['submitted_at'] ?? null)) ?></span></span></div>
-        <div class="status-check"><span class="status-check-icon <?= $status === 'pending' ? 'warn' : '' ?>"><?= wayfairs_icon($status === 'pending' ? 'clock' : 'check') ?></span><span class="status-check-copy"><strong>Manual review</strong><span><?= $status === 'pending' ? 'Waiting for an administrator' : ($status === 'in_review' ? 'Administrator review in progress' : 'Review completed') ?></span></span></div>
+        <div class="status-check"><span class="status-check-icon <?= $status === 'pending' ? 'warn' : '' ?>"><?= wayfairs_icon($status === 'pending' ? 'clock' : 'check') ?></span><span class="status-check-copy"><strong>Verification review</strong><span><?= $status === 'pending' ? 'Waiting to be reviewed' : ($status === 'in_review' ? 'Review in progress' : 'Review completed') ?></span></span></div>
         <div class="status-check"><span class="status-check-icon <?= $status === 'verified' ? '' : 'warn' ?>"><?= wayfairs_icon($status === 'verified' ? 'check' : 'clock') ?></span><span class="status-check-copy"><strong>Money movement access</strong><span><?= $status === 'verified' ? 'Verification gate satisfied' : 'Remains locked until approval' ?></span></span></div>
       </div>
       <?php if (!empty($profile['submission_reference'])): ?><div class="destination-field"><span>Submission reference</span><div class="copy-line"><strong class="mono"><?= e((string) $profile['submission_reference']) ?></strong><button class="btn small ghost copy-button" type="button" data-copy="<?= e((string) $profile['submission_reference']) ?>" aria-label="Copy submission reference"><?= wayfairs_icon('copy') ?></button></div></div><?php endif; ?>
@@ -53,7 +53,7 @@ $initials = mb_strtoupper(mb_substr((string) ($user['first_name'] ?? 'U'), 0, 1)
           <label>Last 4 characters of ID<input name="id_last4" maxlength="8" value="<?= e((string) ($profile['id_last4'] ?? '')) ?>" autocomplete="off" required /></label>
         </div>
         <div class="receipt-footnote"><?= wayfairs_icon('security') ?><span>This application stores the submitted profile fields and only the supplied ending characters of the ID number. It does not claim an automated provider check.</span></div>
-        <div class="form-actions"><button class="btn" type="submit">Submit for manual review <?= wayfairs_icon('arrow-right', 'btn-icon') ?></button></div>
+        <div class="form-actions"><button class="btn" type="submit">Submit for verification <?= wayfairs_icon('arrow-right', 'btn-icon') ?></button></div>
       </form>
     <?php endif; ?>
   </article>

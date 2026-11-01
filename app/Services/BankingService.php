@@ -123,7 +123,7 @@ final class BankingService
         return $this->createExternalRequest($userId, $account, $asset, $amount, $destination, $idempotencyToken, 'withdrawal', $remark);
     }
 
-    public function submitBankTransfer(string $userId, string $assetCode, string $amount, array $destination, string $idempotencyToken, string $remark = ''): array
+    public function submitBankTransfer(string $userId, string $assetCode, string $amount, array $destination, string $idempotencyToken, string $remark = '', string $route = '', string $purpose = 'transfer'): array
     {
         $account = $this->accountFor($userId, $assetCode);
         $asset = $account['asset'];
@@ -131,49 +131,85 @@ final class BankingService
         if ((string) $asset['asset_type'] !== 'fiat') {
             throw new \RuntimeException('Bank transfers require a fiat currency account.');
         }
-        foreach (['country_code', 'beneficiary_name', 'bank_name'] as $field) {
-            if (trim((string) ($destination[$field] ?? '')) === '') {
-                throw new \RuntimeException('Complete the beneficiary country, name, and bank.');
-            }
+
+        $beneficiaryName = $this->cleanText((string) ($destination['beneficiary_name'] ?? ''), 160);
+        $bankName = $this->cleanText((string) ($destination['bank_name'] ?? ''), 160);
+        $country = $this->compact((string) ($destination['country_code'] ?? ''));
+        if ($beneficiaryName === '' || $bankName === '' || $country === '') {
+            throw new \RuntimeException('Complete the beneficiary country, name, and bank.');
         }
-        $country = strtoupper(trim((string) $destination['country_code']));
         if (!preg_match('/^[A-Z]{2}$/', $country)) {
             throw new \RuntimeException('Choose a valid two-letter beneficiary country.');
         }
-        if (function_exists('wayfairs_countries') && !array_key_exists($country, \wayfairs_countries())) {
+        // The country catalog comes from PHP's intl extension. When that extension
+        // is unavailable the catalog is empty, so accept any two-letter country
+        // code instead of blocking every beneficiary.
+        $catalog = \function_exists('wayfairs_countries') ? \wayfairs_countries() : [];
+        if ($catalog !== [] && !array_key_exists($country, $catalog)) {
             throw new \RuntimeException('Choose a recognized beneficiary country.');
         }
-        $iban = strtoupper(str_replace(' ', '', trim((string) ($destination['iban'] ?? ''))));
-        $accountNumber = trim((string) ($destination['account_number'] ?? ''));
-        if ($iban === '' && $accountNumber === '') {
-            throw new \RuntimeException('Enter an IBAN or account number.');
+
+        $iban = $this->compact((string) ($destination['iban'] ?? ''));
+        $accountNumber = $this->compactAccount((string) ($destination['account_number'] ?? ''));
+        $route = strtolower(trim($route));
+        if (!in_array($route, ['iban', 'local'], true)) {
+            $route = $iban !== '' ? 'iban' : 'local';
         }
-        if ($iban !== '' && !preg_match('/^[A-Z]{2}[0-9]{2}[A-Z0-9]{11,30}$/', $iban)) {
-            throw new \RuntimeException('Enter a valid IBAN without unsupported characters.');
+        // Honour the route the customer selected and ignore stale input from the
+        // other route so a leftover value cannot block a valid transfer.
+        if ($route === 'iban' && $iban === '' && $accountNumber !== '') {
+            $route = 'local';
+        } elseif ($route === 'local' && $accountNumber === '' && $iban !== '') {
+            $route = 'iban';
         }
-        $swift = strtoupper(str_replace(' ', '', trim((string) ($destination['swift_bic'] ?? ''))));
-        if ($swift !== '' && !preg_match('/^[A-Z0-9]{8}([A-Z0-9]{3})?$/', $swift)) {
-            throw new \RuntimeException('Enter a valid 8 or 11 character SWIFT/BIC.');
+
+        $clean = [
+            'country_code' => $country,
+            'beneficiary_name' => $beneficiaryName,
+            'bank_name' => $bankName,
+        ];
+        foreach (['beneficiary_address' => 300, 'bank_address' => 300] as $field => $limit) {
+            $value = $this->cleanText((string) ($destination[$field] ?? ''), $limit);
+            if ($value !== '') {
+                $clean[$field] = $value;
+            }
         }
-        $destination = array_intersect_key($destination, array_flip([
-            'country_code', 'beneficiary_name', 'beneficiary_address', 'bank_name',
-            'bank_address', 'iban', 'account_number', 'routing_code', 'swift_bic',
-        ]));
-        foreach ($destination as $field => $value) {
-            $destination[$field] = mb_substr(trim((string) $value), 0, 300);
+
+        if ($route === 'iban') {
+            if ($iban === '') {
+                throw new \RuntimeException('Enter the beneficiary IBAN.');
+            }
+            if (strlen($iban) < 15 || strlen($iban) > 34 || !preg_match('/^[A-Z]{2}[0-9]{2}[A-Z0-9]+$/', $iban)) {
+                throw new \RuntimeException('Check the IBAN. It should start with a two-letter country code, two check digits, then the account details.');
+            }
+            $clean['iban'] = $iban;
+            $swift = $this->compact((string) ($destination['swift_bic'] ?? ''));
+            if ($swift !== '') {
+                if (!preg_match('/^[A-Z0-9]{8}([A-Z0-9]{3})?$/', $swift)) {
+                    throw new \RuntimeException('Check the SWIFT/BIC. It should be 8 or 11 letters and digits.');
+                }
+                $clean['swift_bic'] = $swift;
+            }
+        } else {
+            if ($accountNumber === '') {
+                throw new \RuntimeException('Enter the beneficiary account number.');
+            }
+            if (strlen($accountNumber) < 4 || strlen($accountNumber) > 40) {
+                throw new \RuntimeException('Check the account number. It should be between 4 and 40 letters and digits.');
+            }
+            $clean['account_number'] = $accountNumber;
+            $routing = $this->compact((string) ($destination['routing_code'] ?? ''));
+            if ($routing !== '') {
+                $clean['routing_code'] = $routing;
+            }
         }
-        $destination['country_code'] = $country;
-        if ($iban !== '') {
-            $destination['iban'] = $iban;
-        }
-        if ($swift !== '') {
-            $destination['swift_bic'] = $swift;
-        }
-        return $this->createExternalRequest($userId, $account, $asset, $amount, $destination, $idempotencyToken, 'bank_transfer', $remark);
+
+        return $this->createExternalRequest($userId, $account, $asset, $amount, $clean, $idempotencyToken, 'bank_transfer', $remark, $purpose);
     }
 
-    private function createExternalRequest(string $userId, array $account, array $asset, string $amount, array $destination, string $idempotencyToken, string $kind, string $remark): array
+    private function createExternalRequest(string $userId, array $account, array $asset, string $amount, array $destination, string $idempotencyToken, string $kind, string $remark, string $purpose = 'transfer'): array
     {
+        $purpose = in_array($purpose, ['transfer', 'bill'], true) ? $purpose : 'transfer';
         if (!(int) $asset['withdrawal_enabled']) {
             throw new \RuntimeException(($kind === 'bank_transfer' ? 'Bank transfers' : 'Withdrawals') . ' are not open for this asset.');
         }
@@ -194,23 +230,23 @@ final class BankingService
         if ($this->ledger->accountBalance($account['id']) < $total) {
             throw new \RuntimeException('Insufficient available balance for this request and its fee.');
         }
-        $label = $kind === 'bank_transfer' ? 'Bank transfer' : 'Withdrawal';
+        $label = $kind === 'bank_transfer' ? ($purpose === 'bill' ? 'Bill payment' : 'Bank transfer') : 'Withdrawal';
         $entryId = $this->ledger->createEntry('withdrawal', $label . ' request', $userId, $idempotencyKey);
         $withdrawalId = Security::uuid();
         $holdId = Security::uuid();
         $transactionId = Security::uuid();
         $encrypted = Security::encrypt($destination, (string) Config::instance()->get('app_key', ''));
         $summary = $this->destinationSummary($destination);
-        $remark = mb_substr(trim($remark), 0, 500);
-        $this->database->transaction(function (Database $db) use ($userId, $account, $amountMinor, $fee, $total, $withdrawalId, $holdId, $transactionId, $entryId, $encrypted, $summary, $asset, $kind, $label, $remark): void {
+        $remark = $this->cleanText($remark, 500);
+        $this->database->transaction(function (Database $db) use ($userId, $account, $amountMinor, $fee, $total, $withdrawalId, $holdId, $transactionId, $entryId, $encrypted, $summary, $asset, $kind, $label, $remark, $purpose): void {
             $db->execute(
                 'INSERT INTO transactions (id, user_id, account_id, journal_entry_id, public_reference, transaction_type, direction, amount_minor, fee_minor, status, description, metadata) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-                [$transactionId, $userId, $account['id'], $entryId, Security::reference($kind === 'bank_transfer' ? 'BTF' : 'WDR'), 'withdrawal', 'debit', $amountMinor, $fee, 'pending', $label . ' awaiting settlement', json_encode(['request_kind' => $kind, 'user_remark' => $remark ?: null], JSON_THROW_ON_ERROR)]
+                [$transactionId, $userId, $account['id'], $entryId, Security::reference($kind === 'bank_transfer' ? 'BTF' : 'WDR'), 'withdrawal', 'debit', $amountMinor, $fee, 'pending', $label . ' pending', json_encode(['request_kind' => $kind, 'user_remark' => $remark ?: null], JSON_THROW_ON_ERROR | JSON_INVALID_UTF8_SUBSTITUTE)]
             );
             $db->execute('INSERT INTO holds (id, account_id, source_type, source_id, amount_minor) VALUES (?, ?, ?, ?, ?)', [$holdId, $account['id'], 'withdrawal', $withdrawalId, $total]);
             $db->execute(
-                'INSERT INTO withdrawal_requests (id, user_id, account_id, transaction_id, hold_id, withdrawal_type, request_kind, amount_minor, fee_minor, destination_ciphertext, destination_summary, user_remark, status, journal_entry_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-                [$withdrawalId, $userId, $account['id'], $transactionId, $holdId, (string) $asset['asset_type'] === 'crypto' ? 'crypto' : 'fiat', $kind, $amountMinor, $fee, $encrypted, $summary, $remark ?: null, 'pending', $entryId]
+                'INSERT INTO withdrawal_requests (id, user_id, account_id, transaction_id, hold_id, withdrawal_type, request_kind, payment_purpose, amount_minor, fee_minor, destination_ciphertext, destination_summary, user_remark, status, journal_entry_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+                [$withdrawalId, $userId, $account['id'], $transactionId, $holdId, (string) $asset['asset_type'] === 'crypto' ? 'crypto' : 'fiat', $kind, $purpose, $amountMinor, $fee, $encrypted, $summary, $remark ?: null, 'pending', $entryId]
             );
         });
         return $this->database->fetchOne('SELECT * FROM withdrawal_requests WHERE id = ?', [$withdrawalId]);
@@ -492,11 +528,57 @@ final class BankingService
 
     private function positiveAmount(string $amount, int $scale): int
     {
-        $minor = Money::parse($amount, $scale);
+        try {
+            $minor = Money::parse($amount, $scale);
+        } catch (\InvalidArgumentException $error) {
+            throw new \RuntimeException($error->getMessage(), 0, $error);
+        }
         if ($minor <= 0) {
             throw new \RuntimeException('Enter an amount greater than zero.');
         }
         return $minor;
+    }
+
+    /**
+     * Accept pasted banking identifiers: uppercase, drop spaces, dashes, dots,
+     * and any invisible character that a phone keyboard may add.
+     */
+    private function compact(string $value): string
+    {
+        $value = trim($value);
+        if ($value === '') {
+            return '';
+        }
+        return strtoupper((string) preg_replace('/[^A-Za-z0-9]/', '', $value));
+    }
+
+    private function compactAccount(string $value): string
+    {
+        $value = trim($value);
+        if ($value === '') {
+            return '';
+        }
+        return strtoupper((string) preg_replace('/[^A-Za-z0-9.\-]/', '', $value));
+    }
+
+    /**
+     * Trim free-text input to valid UTF-8 so JSON encoding, encryption, and
+     * database writes cannot fail on control characters or broken encoding.
+     */
+    private function cleanText(string $value, int $limit): string
+    {
+        $value = trim($value);
+        if ($value === '') {
+            return '';
+        }
+        if (!mb_check_encoding($value, 'UTF-8')) {
+            $value = mb_convert_encoding($value, 'UTF-8', 'UTF-8');
+        }
+        $filtered = preg_replace('/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/u', '', $value);
+        if (is_string($filtered)) {
+            $value = $filtered;
+        }
+        return mb_substr(trim($value), 0, $limit);
     }
 
     private function idempotencyKey(string $scope, string $userId, string $token): string
@@ -511,7 +593,7 @@ final class BankingService
         foreach (['country_code', 'beneficiary_name', 'bank_name', 'account_name', 'iban', 'account_number', 'routing_code', 'swift_bic', 'network', 'address', 'memo'] as $field) {
             if (!empty($destination[$field])) {
                 $value = (string) $destination[$field];
-                $parts[] = $field . ':' . (in_array($field, ['iban', 'account_number', 'address'], true) ? '…' . substr($value, -4) : mb_substr($value, 0, 30));
+                $parts[] = $field . ':' . (in_array($field, ['iban', 'account_number', 'address'], true) ? '…' . mb_substr($value, -4) : mb_substr($value, 0, 30));
             }
         }
         return mb_substr(implode('; ', $parts), 0, 200);

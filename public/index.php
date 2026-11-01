@@ -62,7 +62,14 @@ if (!$config->installed()) {
 }
 
 $database = Database::fromConfig($config);
-(new Migrator($database))->migrate();
+try {
+    (new Migrator($database))->migrate();
+} catch (Throwable $error) {
+    error_log('[wayfairs] database update failed: ' . $error->getMessage());
+    http_response_code(503);
+    echo '<!doctype html><html><body><h1>Wayfairs is updating. Please try again in a moment.</h1></body></html>';
+    exit;
+}
 
 $auth = new AuthService($database);
 $cookieName = (string) $config->get('session.cookie', 'wayfairs_session');

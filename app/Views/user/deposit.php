@@ -29,7 +29,7 @@ $firstAsset = $firstAccount['asset'] ?? null;
 <?php else: ?>
   <section class="content-grid">
     <article class="card form-card">
-      <div class="form-intro"><h2>Submit deposit details</h2><p>Your balance changes only after an administrator verifies that the funds were actually received.</p></div>
+      <div class="form-intro"><h2>Submit deposit details</h2><p>Your balance updates once we confirm the funds have arrived.</p></div>
       <form class="stack" method="post" action="<?= e(wayfairs_url('/deposit')) ?>" id="deposit-form">
         <input type="hidden" name="_token" value="<?= e(wayfairs_csrf()) ?>" />
         <input type="hidden" name="idem" value="<?= e(wayfairs_idem()) ?>" />
@@ -51,7 +51,7 @@ $firstAsset = $firstAccount['asset'] ?? null;
           <span class="field-hint">Enter the amount in the selected currency. Values below its configured minimum are rejected.</span>
         </label>
         <label>Remark <span class="field-hint">Optional</span>
-          <input name="remark" maxlength="500" placeholder="Add a note for the operations team" <?= $verified ? '' : 'disabled' ?> />
+          <input name="remark" maxlength="500" placeholder="Add a short note" <?= $verified ? '' : 'disabled' ?> />
         </label>
         <div class="form-actions"><button class="btn full" type="submit" <?= $verified ? '' : 'disabled' ?>><?= $verified ? 'Submit deposit for verification' : 'Verification required' ?> <?= wayfairs_icon('arrow-right', 'btn-icon') ?></button></div>
       </form>
@@ -95,11 +95,11 @@ $firstAsset = $firstAccount['asset'] ?? null;
         <?php endforeach; ?>
       </article>
       <article class="card static">
-        <div class="panel-head"><div><h2>How deposits settle</h2><p>No balance is credited before verification.</p></div></div>
+        <div class="panel-head"><div><h2>How deposits work</h2><p>Your balance updates once the deposit is confirmed.</p></div></div>
         <div class="process-steps">
           <div class="process-step"><div><strong>Send to the published destination</strong><p>Use only the bank account, wallet, and network shown above.</p></div></div>
           <div class="process-step"><div><strong>Submit your exact details</strong><p>Record the amount and any sender reference or transaction hash.</p></div></div>
-          <div class="process-step"><div><strong>Operations verifies receipt</strong><p>Your account is credited only after an administrator confirms the incoming funds.</p></div></div>
+          <div class="process-step"><div><strong>Deposit is confirmed</strong><p>Your account is credited once we confirm the incoming funds.</p></div></div>
         </div>
       </article>
     </aside>

@@ -2,6 +2,7 @@
 /storage/*.sqlite
 /storage/*.sqlite-*
 /storage/sessions/
+/storage/*.lock
 /storage/backups/
 /storage/logs/*
 !/storage/logs/.gitkeep

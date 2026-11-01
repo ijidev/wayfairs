@@ -49,7 +49,7 @@ final class Security
             throw new RuntimeException('Application encryption key is invalid.');
         }
         $nonce = random_bytes(SODIUM_CRYPTO_SECRETBOX_NONCEBYTES);
-        $plain = json_encode($value, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR);
+        $plain = json_encode($value, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR | JSON_INVALID_UTF8_SUBSTITUTE);
         return base64_encode($nonce . sodium_crypto_secretbox($plain, $nonce, $key));
     }
 

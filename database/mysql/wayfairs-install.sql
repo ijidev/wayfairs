@@ -481,8 +481,23 @@ CREATE TABLE usd_rates (
   CONSTRAINT usd_rates_asset_fk FOREIGN KEY (asset_id) REFERENCES assets(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+-- ==== migration 004_bill_payments_and_open_limits (source: 004_bill_payments_and_open_limits.sql) ====
+-- Bill payments reuse the bank-transfer settlement machinery; this column keeps
+-- them listed separately from ordinary transfers.
+ALTER TABLE withdrawal_requests
+  ADD COLUMN payment_purpose ENUM('transfer','bill') NOT NULL DEFAULT 'transfer' AFTER request_kind;
+
+-- Earlier installs seeded a minimum deposit or withdrawal on the standard
+-- currencies. Clear only those untouched seeded values; administrators can still
+-- set a minimum deliberately in the asset settings.
+UPDATE assets SET min_deposit_minor = 0
+  WHERE code IN ('USD','BTC','ETH') AND min_deposit_minor IN (1000, 100000, 1000000000000000);
+UPDATE assets SET min_withdrawal_minor = 0
+  WHERE code IN ('USD','BTC','ETH') AND min_withdrawal_minor IN (1000, 100000, 1000000000000000);
+
 -- ==== migration ledger (matches the application checksums) ====
 INSERT INTO schema_migrations (version, checksum, applied_at) VALUES
     ('001_core', 'b005c9d14426caf95b8834c76c94d86a01ae14210a33766935160f30e67df25e', UTC_TIMESTAMP(6)),
     ('002_asset_deposit_details', 'c6ef9903920a6d1c37bdcea664cc5bbe05415612982808ad74053d02365dd84d', UTC_TIMESTAMP(6)),
-    ('003_bank_transfers_and_usd_rates', '11b64eadc10a767c764dc4447384e5914dea97fc09890f91eda62597f6b3f5a9', UTC_TIMESTAMP(6));
+    ('003_bank_transfers_and_usd_rates', '11b64eadc10a767c764dc4447384e5914dea97fc09890f91eda62597f6b3f5a9', UTC_TIMESTAMP(6)),
+    ('004_bill_payments_and_open_limits', '4fda0fa746fe5c15e257b651bc68c284c44a6a98f16ca9a208235f8b05a5b72c', UTC_TIMESTAMP(6));

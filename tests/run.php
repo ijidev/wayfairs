@@ -99,8 +99,16 @@ $check('transfer form offers one banking route at a time', substr_count($transfe
 
 $database = new Database(['driver' => 'sqlite', 'path' => $directory . '/test.sqlite']);
 $applied = (new Migrator($database))->migrate();
-$check('migrations apply once', $applied === ['001_core', '002_asset_deposit_details', '003_bank_transfers_and_usd_rates']);
+$check('migrations apply once', $applied === ['001_core', '002_asset_deposit_details', '003_bank_transfers_and_usd_rates', '004_bill_payments_and_open_limits']);
 $check('migrations are idempotent', (new Migrator($database))->migrate() === []);
+// A migration whose columns were added before its bookkeeping row was written
+// (an interrupted deploy) must finish on the next request instead of failing.
+$repairDatabase = new Database(['driver' => 'sqlite', 'path' => $directory . '/repair.sqlite']);
+(new Migrator($repairDatabase))->migrate();
+$repairDatabase->execute("DELETE FROM schema_migrations WHERE version = '004_bill_payments_and_open_limits'");
+$repaired = (new Migrator($repairDatabase))->migrate();
+$check('interrupted migration completes on the next run', $repaired === ['004_bill_payments_and_open_limits'] && $repairDatabase->fetchOne("SELECT COUNT(*) AS total FROM schema_migrations WHERE version = '004_bill_payments_and_open_limits'")['total'] == 1);
+$check('repaired migration keeps the bill payment column', $repairDatabase->fetchOne("SELECT COUNT(*) AS total FROM pragma_table_info('withdrawal_requests') WHERE name = 'payment_purpose'")['total'] == 1);
 $generatedMysql = (string) shell_exec(escapeshellarg(PHP_BINARY) . ' ' . escapeshellarg(WAYFAIRS_ROOT . '/scripts/build-mysql-install.php'));
 $committedMysql = (string) file_get_contents(WAYFAIRS_ROOT . '/database/mysql/wayfairs-install.sql');
 $check('single MySQL install file matches the numbered migrations', $generatedMysql !== '' && $generatedMysql === $committedMysql);
@@ -258,6 +266,20 @@ $banking->approveWithdrawal((string) $bankTransfer2['id'], $adminId, true, '', '
 $completedBankTransfer = $database->fetchOne('SELECT status, external_reference, review_reason FROM withdrawal_requests WHERE id = ?', [$bankTransfer2['id']]);
 $check('completed bank transfer captures funds once', $ledger->accountBalance($aliceEur['id']) === $expectedAfterTransfers - 200000 && $completedBankTransfer['status'] === 'completed' && $completedBankTransfer['external_reference'] === 'BANK-SETTLE-2');
 $check('settlement remark is optional', $completedBankTransfer['review_reason'] === null);
+
+// Beneficiary routes: only the selected route is stored, pasted identifiers are cleaned, and bills stay separate.
+$routeBefore = $ledger->accountBalance($aliceEur['id']);
+$localRoute = $banking->submitBankTransfer((string) $alice['id'], 'EUR', '1.00', ['country_code' => 'GB', 'beneficiary_name' => 'Route Local', 'bank_name' => 'Test Bank', 'account_number' => '1234 5678', 'iban' => 'GB00 STALE'], 'route-local', '', 'local');
+$localDetails = \Wayfairs\Core\Security::decrypt((string) $localRoute['destination_ciphertext'], (string) $mockConfig->get('app_key'));
+$check('local route ignores a stale IBAN and keeps the account number', $localDetails['account_number'] === '12345678' && !isset($localDetails['iban']));
+$ibanRoute = $banking->submitBankTransfer((string) $alice['id'], 'EUR', '1.00', ['country_code' => 'DE', 'beneficiary_name' => 'Route Iban', 'bank_name' => 'Test Bank', 'iban' => 'de89-3704 0044 0532-0130 00', 'account_number' => '99999'], 'route-iban', '', 'iban');
+$ibanDetails = \Wayfairs\Core\Security::decrypt((string) $ibanRoute['destination_ciphertext'], (string) $mockConfig->get('app_key'));
+$check('IBAN route accepts spaces and hyphens and ignores stale account input', $ibanDetails['iban'] === 'DE89370400440532013000' && !isset($ibanDetails['account_number']));
+$billPayment = $banking->submitBankTransfer((string) $alice['id'], 'EUR', '1.00', ['country_code' => 'GB', 'beneficiary_name' => 'City Power', 'bank_name' => 'Test Bank', 'iban' => 'GB33BUKB20201555555555'], 'bill-1', 'Bill reference INV-1', 'iban', 'bill');
+$check('bill payment is recorded as a bill, not a transfer', $billPayment['payment_purpose'] === 'bill' && $billPayment['user_remark'] === 'Bill reference INV-1');
+$check('each route and bill reserves exactly its amount', $routeBefore - $ledger->accountBalance($aliceEur['id']) === 300);
+$check('amount with a thousands separator is refused with a clear message', $expectThrows(static fn () => $banking->submitBankTransfer((string) $alice['id'], 'EUR', '1,000', ['country_code' => 'GB', 'beneficiary_name' => 'Test', 'bank_name' => 'Test Bank', 'account_number' => '12345678'], 'bad-amount', '', 'local'), 'valid positive amount'));
+$check('new installs seed no minimum deposit or withdrawal', (int) $database->fetchOne("SELECT min_deposit_minor + min_withdrawal_minor AS total FROM assets WHERE code = 'USD'")['total'] === 0);
 
 // USD projections use persisted observed decimal rates without floats.
 $eurAsset = $database->fetchOne("SELECT * FROM assets WHERE code = 'EUR'");

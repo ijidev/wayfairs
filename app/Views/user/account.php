@@ -42,7 +42,7 @@ $rate = $usdRates[$asset['code']] ?? null;
     </div>
     <div class="balance-meta">
       <div><strong><?= e(wayfairs_amount($held, (int) $asset['scale'], (string) $asset['symbol'])) ?></strong><span>Reserved</span></div>
-      <div><strong><?= e(wayfairs_amount($total, (int) $asset['scale'], (string) $asset['symbol'])) ?></strong><span>Ledger total</span></div>
+      <div><strong><?= e(wayfairs_amount($total, (int) $asset['scale'], (string) $asset['symbol'])) ?></strong><span>Total balance</span></div>
       <div><strong><?= e(wayfairs_datetime((string) $account['created_at'])) ?></strong><span>Opened</span></div>
     </div>
   </article>
@@ -65,7 +65,7 @@ $rate = $usdRates[$asset['code']] ?? null;
     <a class="btn small ghost" href="<?= e(wayfairs_url('/transactions')) ?>">All transactions</a>
   </div>
   <?php if ($history === []): ?>
-    <div class="empty-state"><div class="empty-icon"><?= wayfairs_icon('activity') ?></div><h3>No account activity</h3><p>This account has no persisted transactions yet.</p></div>
+    <div class="empty-state"><div class="empty-icon"><?= wayfairs_icon('activity') ?></div><h3>No account activity</h3><p>This account has no transactions yet.</p></div>
   <?php else: ?>
     <div class="transaction-list">
       <?php foreach ($history as $row): $credit = (string) $row['direction'] === 'credit'; ?>

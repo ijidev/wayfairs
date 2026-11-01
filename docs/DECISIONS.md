@@ -180,3 +180,44 @@ The installer's default tagline and footer changed to the same positioning; the
 footer partial also replaces the previously seeded "secure manual settlement
 preview" line on older installations. An administrator can still override either
 value in Settings.
+
+## WDR-017 — Self-repairing migrations instead of manual database steps
+
+Date: 2026-11-01
+
+Migrations already run on each request; the failure mode was a migration that
+stopped part-way (MySQL DDL is not transactional, and SQLite batches cannot be
+rolled back once run). The next request then failed on the same statement. The
+migrator now:
+
+- takes an exclusive lock (`storage/migrate.lock`) so two requests cannot apply
+  the same migration at once;
+- returns immediately when nothing is pending, so the per-request cost is one
+  bookkeeping read;
+- runs statements one at a time and skips `ADD COLUMN` clauses and `CREATE TABLE`
+  statements that already exist, so an interrupted migration finishes on the
+  next request instead of failing;
+- keeps trigger bodies whole when splitting SQLite files;
+- answers a failed update with a retry page and a server log line, not a crash.
+
+No manual SQL is needed on deployment. Migration 004 is the first to rely on this.
+Checksums of applied migrations are still enforced.
+
+## WDR-018 — Bill payments reuse the transfer engine; flights are not faked
+
+Date: 2026-11-01
+
+Bill payments go through the same bank-transfer reservation and settlement path,
+tagged with `withdrawal_requests.payment_purpose = 'bill'` (migration 004), so
+they are listed on Pay a bill and kept out of transfer history. The biller's bank
+details and bill reference are the only inputs.
+
+Flight booking has no provider in this installation. The dashboard shows an
+honest "not available on your account yet" card with no action, rather than a
+search form that cannot book anything.
+
+Transfer hardening: the selected route decides which identifier is used and any
+value in the other field is ignored; IBAN and account numbers accept pasted
+spaces, hyphens and dots; free text is cleaned to valid UTF-8 before encryption.
+Migration 004 also clears the untouched seeded minimum deposit and withdrawal
+(USD 10, BTC and ETH floors), and new installs seed none.

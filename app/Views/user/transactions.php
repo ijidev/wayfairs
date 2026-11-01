@@ -9,7 +9,7 @@ $failed = count(array_filter($history, static fn (array $row): bool => in_array(
 <header class="page-header">
   <div class="page-heading">
     <span class="page-icon"><?= wayfairs_icon('activity') ?></span>
-    <div class="page-heading-copy"><span class="page-kicker">Money activity</span><h1>Transactions</h1><p>Search and review your latest persisted transactions across every enabled currency account.</p></div>
+    <div class="page-heading-copy"><span class="page-kicker">Money activity</span><h1>Transactions</h1><p>Search and review your recent transactions across all your currency accounts.</p></div>
   </div>
   <div class="page-actions"><a class="btn ghost" href="<?= e(wayfairs_url('/dashboard')) ?>">Back to overview</a></div>
 </header>

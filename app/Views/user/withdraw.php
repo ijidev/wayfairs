@@ -14,7 +14,7 @@ $firstType = (string) ($firstAsset['asset_type'] ?? 'fiat');
 <header class="page-header">
   <div class="page-heading">
     <span class="page-icon"><?= wayfairs_icon('withdraw') ?></span>
-    <div class="page-heading-copy"><span class="page-kicker">Move money out</span><h1>Withdraw</h1><p>Request a payout to your bank account or wallet. The requested amount and fee are reserved while operations processes it.</p></div>
+    <div class="page-heading-copy"><span class="page-kicker">Move money out</span><h1>Withdraw</h1><p>Request a payout to your bank account or wallet. The requested amount and fee are held from your available balance until it is processed.</p></div>
   </div>
   <div class="page-actions"><?= wayfairs_pill('kyc ' . $kycStatus) ?><a class="btn ghost" href="<?= e(wayfairs_url('/transactions')) ?>">Transactions</a></div>
 </header>
@@ -67,7 +67,7 @@ $firstType = (string) ($firstAsset['asset_type'] ?? 'fiat');
           <label>Wallet address<input name="address" maxlength="200" placeholder="bc1... or 0x..."<?= $firstType === 'crypto' && $verified ? ' required' : '' ?><?= $verified ? '' : ' disabled' ?> /></label>
           <label>Memo / tag <span class="field-hint">Only if required</span><input name="memo" maxlength="120"<?= $verified ? '' : ' disabled' ?> /></label>
         </fieldset>
-        <label>Remark <span class="field-hint">Optional</span><input name="remark" maxlength="500" placeholder="Add a note for the operations team"<?= $verified ? '' : ' disabled' ?> /></label>
+        <label>Remark <span class="field-hint">Optional</span><input name="remark" maxlength="500" placeholder="Add a short note"<?= $verified ? '' : ' disabled' ?> /></label>
         <div class="form-actions"><button class="btn full" type="submit" <?= $verified ? '' : 'disabled' ?>><?= $verified ? 'Submit withdrawal request' : 'Verification required' ?> <?= wayfairs_icon('arrow-right', 'btn-icon') ?></button></div>
       </form>
     </article>
@@ -86,10 +86,10 @@ $firstType = (string) ($firstAsset['asset_type'] ?? 'fiat');
         </div>
       </article>
       <article class="card static">
-        <div class="panel-head"><div><h2>What happens next</h2><p>Settlement is recorded, never simulated.</p></div></div>
+        <div class="panel-head"><div><h2>What happens next</h2><p>Each withdrawal's status is shown in your history.</p></div></div>
         <div class="process-steps">
           <div class="process-step"><div><strong>Funds are reserved</strong><p>The amount and configured fee leave your available balance immediately.</p></div></div>
-          <div class="process-step"><div><strong>Operations sends the payout</strong><p>An administrator verifies and completes it outside Wayfairs.</p></div></div>
+          <div class="process-step"><div><strong>Your payout is processed</strong><p>Its status updates in your withdrawal history until it is complete.</p></div></div>
           <div class="process-step"><div><strong>The decision is recorded</strong><p>Completion captures the hold; rejection releases it back to your available balance.</p></div></div>
         </div>
       </article>

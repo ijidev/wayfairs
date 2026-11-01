@@ -16,7 +16,7 @@ $rate = $usdRates[$r['asset_code']] ?? null;
 ?>
 <div class="receipt-page">
   <header class="page-header">
-    <div class="page-heading"><span class="page-icon"><?= wayfairs_icon('receipt') ?></span><div class="page-heading-copy"><span class="page-kicker">Transaction document</span><h1>Transaction receipt</h1><p>This receipt is generated from the persisted transaction record.</p></div></div>
+    <div class="page-heading"><span class="page-icon"><?= wayfairs_icon('receipt') ?></span><div class="page-heading-copy"><span class="page-kicker">Transaction document</span><h1>Transaction receipt</h1><p>Details of this transaction.</p></div></div>
     <div class="page-actions"><a class="btn ghost" href="<?= e(wayfairs_url('/transactions')) ?>">Transactions</a><button class="btn" type="button" onclick="window.print()"><?= wayfairs_icon('receipt') ?> Print receipt</button></div>
   </header>
 
@@ -45,7 +45,7 @@ $rate = $usdRates[$r['asset_code']] ?? null;
         <div class="receipt-detail"><span>Created</span><strong><?= e(wayfairs_datetime((string) $r['created_at'])) ?></strong></div>
         <div class="receipt-detail"><span>Completed</span><strong><?= e(wayfairs_datetime($r['completed_at'] ?? null)) ?></strong></div>
       </div>
-      <div class="receipt-footnote"><?= wayfairs_icon('info') ?><span>Status and completion time are shown exactly as stored. USD equivalent uses <?= e(wayfairs_rate_disclosure($rate)) ?> and is not a separate ledger balance.</span></div>
+      <div class="receipt-footnote"><?= wayfairs_icon('info') ?><span>Status and completion time are shown exactly as stored. USD equivalent uses <?= e(wayfairs_rate_disclosure($rate)) ?> and is not an additional balance.</span></div>
     </div>
   </article>
 </div>

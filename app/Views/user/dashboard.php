@@ -63,7 +63,7 @@ $fullName = trim((string) ($user['first_name'] ?? '') . ' ' . (string) ($user['l
     <?= wayfairs_icon('verification') ?>
     <div>
       <strong>Identity verification is not complete</strong>
-      <p>Money movement unlocks only after an administrator approves the details you submit.</p>
+      <p>Sending and withdrawing money unlocks once your identity is verified.</p>
       <p><a class="btn small" href="<?= e(wayfairs_url('/kyc')) ?>">Review verification <?= wayfairs_icon('arrow-right', 'btn-icon') ?></a></p>
     </div>
   </div>
@@ -86,11 +86,11 @@ $fullName = trim((string) ($user['first_name'] ?? '') . ' ' . (string) ($user['l
       <div class="bank-card-chip" aria-hidden="true"><span></span><span></span><span></span></div>
       <div class="bank-card-balance"><small>Available balance</small><strong><?= e(wayfairs_amount($available, (int) $asset['scale'], (string) $asset['symbol'], (string) $asset['code'])) ?></strong><span>≈ <?= e(wayfairs_usd_equivalent($available, (int) $asset['scale'], $activeRate)) ?></span></div>
       <div class="bank-card-number" translate="no"><?= e($accountDisplay) ?></div>
-      <div class="bank-card-bottom"><span><small>Account holder</small><strong><?= e($fullName ?: 'Account owner') ?></strong></span><span><small>Ledger total</small><strong><?= e(wayfairs_amount($total, (int) $asset['scale'], (string) $asset['symbol'])) ?></strong></span><span class="contactless"><?= wayfairs_icon('activity') ?></span></div>
+      <div class="bank-card-bottom"><span><small>Account holder</small><strong><?= e($fullName ?: 'Account owner') ?></strong></span><span><small>Total balance</small><strong><?= e(wayfairs_amount($total, (int) $asset['scale'], (string) $asset['symbol'])) ?></strong></span><span class="contactless"><?= wayfairs_icon('activity') ?></span></div>
     </article>
 
     <article class="card static portfolio-control">
-      <div class="portfolio-total"><span><small>Total portfolio value</small><strong><?= $pricedAccounts > 0 ? e(wayfairs_amount($portfolioUsdMinor, 2, '$', 'USD')) : 'USD unavailable' ?></strong><em><?= $pricedAccounts === count($accounts) ? 'All enabled wallets priced' : $pricedAccounts . ' of ' . count($accounts) . ' wallets priced' ?></em></span><span class="metric-icon"><?= wayfairs_icon('wallet') ?></span></div>
+      <div class="portfolio-total"><span><small>Total portfolio value</small><strong><?= $pricedAccounts > 0 ? e(wayfairs_amount($portfolioUsdMinor, 2, '$', 'USD')) : 'USD unavailable' ?></strong><em><?= $pricedAccounts === count($accounts) ? 'All currencies priced' : $pricedAccounts . ' of ' . count($accounts) . ' currencies priced' ?></em></span><span class="metric-icon"><?= wayfairs_icon('wallet') ?></span></div>
       <p class="field-hint"><?= e(wayfairs_rate_disclosure($activeRate)) ?>. USD values are estimates, not additional balances. Crypto market data by <a href="https://www.coingecko.com/" target="_blank" rel="noopener noreferrer">CoinGecko</a>; fiat reference data by <a href="https://frankfurter.dev/" target="_blank" rel="noopener noreferrer">Frankfurter</a>.</p>
       <label for="currency-select">Balance card currency<select id="currency-select"><?php foreach ($accounts as $candidate): ?><option value="<?= e((string) $candidate['asset']['code']) ?>" <?= $candidate['asset']['code'] === $activeCode ? 'selected' : '' ?>><?= e((string) $candidate['asset']['code']) ?> · <?= e((string) $candidate['asset']['name']) ?></option><?php endforeach; ?></select></label>
       <div class="card-action-row"><a class="btn" href="<?= e(wayfairs_url('/deposit')) ?>"><?= wayfairs_icon('deposit') ?> Deposit</a><a class="btn ghost" href="<?= e(wayfairs_url('/transfer')) ?>"><?= wayfairs_icon('transfer') ?> Transfer</a><a class="btn ghost" href="<?= e(wayfairs_url('/withdraw')) ?>"><?= wayfairs_icon('withdraw') ?> Withdraw</a></div>
@@ -125,7 +125,7 @@ $fullName = trim((string) ($user['first_name'] ?? '') . ' ' . (string) ($user['l
 <?php else: ?>
   <div class="notice brand">
     <?= wayfairs_icon('wallet') ?>
-    <div><strong>No currency accounts are enabled</strong><p>An administrator has not enabled a customer currency yet. No balance is being inferred.</p></div>
+    <div><strong>No currency accounts yet</strong><p>Contact support to open a currency account.</p></div>
   </div>
 <?php endif; ?>
 
@@ -135,6 +135,21 @@ $fullName = trim((string) ($user['first_name'] ?? '') . ' ' . (string) ($user['l
   <a class="quick-action" href="<?= e(wayfairs_url('/transfer')) ?>"><span class="icon-wrap"><?= wayfairs_icon('transfer') ?></span><span>Send money</span></a>
   <a class="quick-action" href="<?= e(wayfairs_url('/invoices')) ?>"><span class="icon-wrap"><?= wayfairs_icon('invoice') ?></span><span>Invoices</span></a>
 </nav>
+
+<section class="utility-section" aria-labelledby="utilities-heading">
+  <div class="panel-head"><div><h2 id="utilities-heading">Utilities</h2><p>Pay bills and plan travel from one place.</p></div></div>
+  <div class="utility-grid">
+    <a class="utility-card" href="<?= e(wayfairs_url('/bills')) ?>">
+      <span class="icon-wrap"><?= wayfairs_icon('receipt') ?></span>
+      <span class="utility-copy"><strong>Pay a bill</strong><small>Send money to a utility, school, or service provider using their bank details and your bill reference.</small></span>
+      <span class="transaction-arrow"><?= wayfairs_icon('arrow-right') ?></span>
+    </a>
+    <div class="utility-card is-unavailable" aria-disabled="true">
+      <span class="icon-wrap"><?= wayfairs_icon('globe') ?></span>
+      <span class="utility-copy"><strong>Book a flight</strong><small>Flight booking isn't available on your account yet.</small></span>
+    </div>
+  </div>
+</section>
 
 <section class="content-grid">
   <article class="card static">
@@ -146,7 +161,7 @@ $fullName = trim((string) ($user['first_name'] ?? '') . ' ' . (string) ($user['l
       <div class="empty-state">
         <div class="empty-icon"><?= wayfairs_icon('activity') ?></div>
         <h3>No transactions yet</h3>
-        <p>Your persisted transaction records will appear here after your first money movement.</p>
+        <p>Your transactions will appear here after your first money movement.</p>
       </div>
     <?php else: ?>
       <div class="transaction-list">
@@ -176,7 +191,7 @@ $fullName = trim((string) ($user['first_name'] ?? '') . ' ' . (string) ($user['l
       </div>
       <div class="status-check">
         <span class="status-check-icon"><?= wayfairs_icon('wallet') ?></span>
-        <span class="status-check-copy"><strong>Enabled currency accounts</strong><span><?= count($accounts) ?> persisted account<?= count($accounts) === 1 ? '' : 's' ?></span></span>
+        <span class="status-check-copy"><strong>Enabled currency accounts</strong><span><?= count($accounts) ?> account<?= count($accounts) === 1 ? '' : 's' ?></span></span>
       </div>
       <div class="status-check">
         <span class="status-check-icon"><?= wayfairs_icon('support') ?></span>

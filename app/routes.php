@@ -38,9 +38,14 @@ return function (Router $router, Database $database): void {
         try {
             $action();
             Flash::put('success', $success);
-        } catch (RuntimeException $error) {
+        } catch (\PDOException $error) {
+            // Never show raw SQL to a customer; keep the detail in the server log.
+            error_log('[wayfairs] database error: ' . $error->getMessage());
+            Flash::put('error', 'That request could not be saved. Please try again in a moment.');
+        } catch (RuntimeException | InvalidArgumentException $error) {
             Flash::put('error', $error->getMessage());
-        } catch (Throwable) {
+        } catch (Throwable $error) {
+            error_log('[wayfairs] ' . $error::class . ': ' . $error->getMessage() . ' in ' . $error->getFile() . ':' . $error->getLine());
             Flash::put('error', 'That did not complete. Please check the details and try again.');
         }
         Response::redirect($failure);
@@ -197,7 +202,7 @@ return function (Router $router, Database $database): void {
         $accounts = $accountRows($banking, $ledger, $database, (string) $user['id']);
         $page('user/transfer', [
             'accounts' => $accounts,
-            'bankTransfers' => $database->fetchAll("SELECT w.*, a.account_number, s.code AS asset_code, s.scale AS asset_scale, s.symbol AS asset_symbol FROM withdrawal_requests w JOIN accounts a ON a.id = w.account_id JOIN assets s ON s.id = a.asset_id WHERE w.user_id = ? AND w.request_kind = 'bank_transfer' ORDER BY w.created_at DESC LIMIT 50", [(string) $user['id']]),
+            'bankTransfers' => $database->fetchAll("SELECT w.*, a.account_number, s.code AS asset_code, s.scale AS asset_scale, s.symbol AS asset_symbol FROM withdrawal_requests w JOIN accounts a ON a.id = w.account_id JOIN assets s ON s.id = a.asset_id WHERE w.user_id = ? AND w.request_kind = 'bank_transfer' AND w.payment_purpose = 'transfer' ORDER BY w.created_at DESC LIMIT 50", [(string) $user['id']]),
             'internalTransfers' => $database->fetchAll('SELECT t.*, s.code AS asset_code, s.scale AS asset_scale, s.symbol AS asset_symbol, su.email AS sender_email, ru.email AS recipient_email FROM transfers t JOIN assets s ON s.id = t.asset_id JOIN users su ON su.id = t.sender_user_id JOIN users ru ON ru.id = t.recipient_user_id WHERE t.sender_user_id = ? OR t.recipient_user_id = ? ORDER BY t.created_at DESC LIMIT 50', [(string) $user['id'], (string) $user['id']]),
             'me' => (string) $user['id'],
             'kyc' => $kyc->profile((string) $user['id']),
@@ -214,7 +219,43 @@ return function (Router $router, Database $database): void {
                 $destination[$field] = $value;
             }
         }
-        $attempt(static fn () => $banking->submitBankTransfer((string) $user['id'], (string) $request->post('asset_code', 'USD'), (string) $request->post('amount', ''), $destination, (string) $request->post('idem', ''), (string) $request->post('remark', '')), 'Bank transfer submitted. Funds are reserved while operations settles it.', '/transfer');
+        $attempt(static fn () => $banking->submitBankTransfer((string) $user['id'], (string) $request->post('asset_code', 'USD'), (string) $request->post('amount', ''), $destination, (string) $request->post('idem', ''), (string) $request->post('remark', ''), (string) $request->post('transfer_route', '')), 'Bank transfer submitted. Funds are reserved while it is processed.', '/transfer');
+    }, 'auth', true);
+
+    $router->get('/bills', static function () use ($page, $banking, $ledger, $accountRows, $me, $database, $kyc, $rates): void {
+        $user = $me();
+        $accounts = $accountRows($banking, $ledger, $database, (string) $user['id']);
+        $page('user/bills', [
+            'accounts' => $accounts,
+            'bills' => $database->fetchAll("SELECT w.*, a.account_number, s.code AS asset_code, s.scale AS asset_scale, s.symbol AS asset_symbol FROM withdrawal_requests w JOIN accounts a ON a.id = w.account_id JOIN assets s ON s.id = a.asset_id WHERE w.user_id = ? AND w.request_kind = 'bank_transfer' AND w.payment_purpose = 'bill' ORDER BY w.created_at DESC LIMIT 50", [(string) $user['id']]),
+            'kyc' => $kyc->profile((string) $user['id']),
+            'usdRates' => $rates->ratesForAssets(array_column($accounts, 'asset')),
+        ]);
+    }, 'auth');
+
+    $router->post('/bills', static function (Request $request) use ($banking, $attempt): never {
+        $user = Context::user() ?? [];
+        $destination = [];
+        $fields = [
+            'country_code' => 'biller_country',
+            'beneficiary_name' => 'biller_name',
+            'beneficiary_address' => 'biller_address',
+            'bank_name' => 'biller_bank',
+            'iban' => 'iban',
+            'account_number' => 'account_number',
+            'routing_code' => 'routing_code',
+            'swift_bic' => 'swift_bic',
+        ];
+        foreach ($fields as $field => $input) {
+            $value = trim((string) $request->post($input, ''));
+            if ($value !== '') {
+                $destination[$field] = $value;
+            }
+        }
+        $reference = trim((string) $request->post('bill_reference', ''));
+        $note = trim((string) $request->post('remark', ''));
+        $remark = $reference !== '' ? 'Bill reference ' . $reference . ($note !== '' ? ' · ' . $note : '') : $note;
+        $attempt(static fn () => $banking->submitBankTransfer((string) $user['id'], (string) $request->post('asset_code', 'USD'), (string) $request->post('amount', ''), $destination, (string) $request->post('idem', ''), $remark, (string) $request->post('transfer_route', ''), 'bill'), 'Bill payment submitted. Funds are reserved while it is processed.', '/bills');
     }, 'auth', true);
 
     $router->post('/transfer/internal', static function (Request $request) use ($banking, $attempt): never {

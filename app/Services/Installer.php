@@ -105,9 +105,9 @@ final class Installer
     private function seedAssets(Database $database, array $input): void
     {
         $assets = [
-            ['USD', 'US Dollar', 'fiat', '$', 2, 1000, 1000, 0, 0, null],
-            ['BTC', 'Bitcoin', 'crypto', '₿', 8, 100000, 100000, 0, 0, 'bitcoin'],
-            ['ETH', 'Ethereum', 'crypto', 'Ξ', 18, 1000000000000000, 1000000000000000, 0, 0, 'ethereum'],
+            ['USD', 'US Dollar', 'fiat', '$', 2, 0, 0, 0, 0, null],
+            ['BTC', 'Bitcoin', 'crypto', '₿', 8, 0, 0, 0, 0, 'bitcoin'],
+            ['ETH', 'Ethereum', 'crypto', 'Ξ', 18, 0, 0, 0, 0, 'ethereum'],
         ];
         foreach ($assets as [$code, $name, $type, $symbol, $scale, $minDeposit, $minWithdrawal, $withdrawalFee, $transferFee, $providerReference]) {
             $assetId = Security::uuid();

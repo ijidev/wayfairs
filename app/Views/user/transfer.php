@@ -18,7 +18,7 @@ $countries = wayfairs_countries();
 
 <section class="content-grid">
   <article class="card form-card bank-transfer-form">
-    <div class="form-intro"><span class="page-kicker">New payment</span><h2>Beneficiary transfer</h2><p>Funds and the configured fee are reserved immediately. Operations records the external settlement or releases the reservation.</p></div>
+    <div class="form-intro"><span class="page-kicker">New payment</span><h2>Beneficiary transfer</h2><p>The amount and any fee are held from your available balance until the transfer is completed or returned to you.</p></div>
     <?php if ($fiatAccounts === []): ?>
       <div class="empty-state"><div class="empty-icon"><?= wayfairs_icon('building') ?></div><h3>No fiat transfer account</h3><p>No enabled fiat account currently accepts bank transfers.</p></div>
     <?php else: ?>
@@ -81,8 +81,8 @@ $countries = wayfairs_countries();
           <label>Routing / sort / transit code <span class="field-hint">Optional</span><input name="routing_code" maxlength="40" autocomplete="off" <?= $verified ? '' : 'disabled' ?> /></label>
         </div>
         <noscript><style>[data-route-group]{display:grid!important}</style><p class="field-hint route-noscript-note">JavaScript is turned off, so both the IBAN and local account number fields are shown. Fill in the one your beneficiary's bank uses and leave the other empty.</p></noscript>
-        <label>Remark <span class="field-hint">Optional</span><input name="remark" maxlength="500" placeholder="Payment purpose or note for operations" <?= $verified ? '' : 'disabled' ?> /></label>
-        <div class="receipt-footnote"><?= wayfairs_icon('security') ?><span>Full bank details are encrypted at rest. Browser and queue views expose only safe labels and last-four summaries.</span></div>
+        <label>Remark <span class="field-hint">Optional</span><input name="remark" maxlength="500" placeholder="Payment purpose or a short note" <?= $verified ? '' : 'disabled' ?> /></label>
+        <div class="receipt-footnote"><?= wayfairs_icon('security') ?><span>Your beneficiary's full bank details are stored securely and shown to you only in masked form.</span></div>
         <div class="form-actions"><button class="btn full" type="submit" <?= $verified ? '' : 'disabled' ?>><?= $verified ? 'Submit bank transfer' : 'Verification required' ?> <?= wayfairs_icon('arrow-right', 'btn-icon') ?></button></div>
       </form>
     <?php endif; ?>
@@ -90,12 +90,12 @@ $countries = wayfairs_countries();
 
   <aside class="stack-list sticky-panel">
     <article class="card static transfer-status-card">
-      <div class="panel-head"><div><h2>Settlement flow</h2><p>Traditional transfer controls with honest manual settlement.</p></div></div>
+      <div class="panel-head"><div><h2>Before you send</h2><p>What to check and what happens next.</p></div></div>
       <div class="process-steps">
-        <div class="process-step"><div><strong>Validate beneficiary details</strong><p>Country, legal name, bank, and the IBAN or local account number you selected are required.</p></div></div>
-        <div class="process-step"><div><strong>Reserve funds</strong><p>The transfer amount and configured fee leave the available balance.</p></div></div>
-        <div class="process-step"><div><strong>Operations settles externally</strong><p>An administrator records sent or rejected; no bank-provider state is simulated.</p></div></div>
-        <div class="process-step"><div><strong>Ledger finalizes</strong><p>Sent captures the hold. Rejected releases it in full.</p></div></div>
+        <div class="process-step"><div><strong>Check the beneficiary</strong><p>Use the account holder's legal name exactly as their bank holds it.</p></div></div>
+        <div class="process-step"><div><strong>Funds are held</strong><p>The amount and any fee move to held funds until the transfer is resolved.</p></div></div>
+        <div class="process-step"><div><strong>Track it here</strong><p>Each transfer's status appears in the history below.</p></div></div>
+        <div class="process-step"><div><strong>If it is returned</strong><p>Held funds go back to your available balance in full.</p></div></div>
       </div>
     </article>
 
@@ -155,7 +155,7 @@ $countries = wayfairs_countries();
 </script>
 
 <section class="card table-card static">
-  <div class="panel-head"><div><h2>Bank transfer history</h2><p>Manual settlement requests, current status, and latest observed USD estimate.</p></div><span class="pill"><?= count($bankTransfers) ?> loaded</span></div>
+  <div class="panel-head"><div><h2>Bank transfer history</h2><p>Your bank transfers, their current status, and an estimated USD value.</p></div><span class="pill"><?= count($bankTransfers) ?> loaded</span></div>
   <?php if ($bankTransfers === []): ?>
     <div class="empty-state"><div class="empty-icon"><?= wayfairs_icon('building') ?></div><h3>No bank transfers</h3><p>Submitted beneficiary transfers will appear here.</p></div>
   <?php else: ?>

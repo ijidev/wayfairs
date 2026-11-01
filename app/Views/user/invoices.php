@@ -39,7 +39,7 @@ $openIssued = count(array_filter($issued, static fn (array $invoice): bool => (s
       <input type="hidden" name="_token" value="<?= e(wayfairs_csrf()) ?>" />
       <input type="hidden" name="idem" value="<?= e(wayfairs_idem()) ?>" />
       <label>Invoice code<input class="mono" name="code" placeholder="INV-…" autocomplete="off" required <?= $verified ? '' : 'disabled' ?> /><span class="field-hint">Payment uses the currency and amount stored on the invoice.</span></label>
-      <div class="receipt-footnote"><?= wayfairs_icon('info') ?><span>A successful payment creates a balanced internal transfer and persisted transaction records for both customers.</span></div>
+      <div class="receipt-footnote"><?= wayfairs_icon('info') ?><span>Paying an invoice moves the money between the two accounts and records it for both customers.</span></div>
       <div class="form-actions"><button class="btn full" type="submit" <?= $verified ? '' : 'disabled' ?>><?= $verified ? 'Pay invoice' : 'Verification required' ?> <?= wayfairs_icon('arrow-right', 'btn-icon') ?></button></div>
     </form>
   </article>
