@@ -99,7 +99,7 @@ $check('transfer form offers one banking route at a time', substr_count($transfe
 
 $database = new Database(['driver' => 'sqlite', 'path' => $directory . '/test.sqlite']);
 $applied = (new Migrator($database))->migrate();
-$check('migrations apply once', $applied === ['001_core', '002_asset_deposit_details', '003_bank_transfers_and_usd_rates', '004_bill_payments_and_open_limits', '005_flight_requests']);
+$check('migrations apply once', $applied === ['001_core', '002_asset_deposit_details', '003_bank_transfers_and_usd_rates', '004_bill_payments_and_open_limits', '005_flight_requests', '006_beneficiaries']);
 $check('migrations are idempotent', (new Migrator($database))->migrate() === []);
 // A migration whose columns were added before its bookkeeping row was written
 // (an interrupted deploy) must finish on the next request instead of failing.
@@ -334,6 +334,35 @@ $flights->decide((string) $flightOne['id'], 'contacted', 'Called to confirm the 
 $flights->decide((string) $flightOne['id'], 'booked', 'Confirmed by phone.', $adminId);
 $check('flight request moves requested to contacted to booked', $database->fetchOne('SELECT status FROM flight_requests WHERE id = ?', [(string) $flightOne['id']])['status'] === 'booked');
 $check('booked flight request cannot be reopened', $expectThrows(static fn () => $flights->decide((string) $flightOne['id'], 'contacted', '', $adminId), 'cannot be changed'));
+
+// Review step: a preview shows the payment and writes nothing.
+$transactionsBefore = (int) $database->fetchOne('SELECT COUNT(*) AS n FROM withdrawal_requests')['n'];
+$balanceBeforePreview = $ledger->accountBalance($aliceEur['id']);
+$preview = $banking->previewBankTransfer((string) $alice['id'], 'EUR', '5.00', ['country_code' => 'GB', 'beneficiary_name' => 'Preview Person', 'bank_name' => 'Test Bank', 'account_number' => '55667788'], 'preview remark', 'local');
+$check('review preview returns the cleaned payment', $preview['destination']['account_number'] === '55667788' && $preview['amount_minor'] === 500 && $preview['remark'] === 'preview remark');
+$check('review preview reserves nothing', $ledger->accountBalance($aliceEur['id']) === $balanceBeforePreview && (int) $database->fetchOne('SELECT COUNT(*) AS n FROM withdrawal_requests')['n'] === $transactionsBefore);
+$check('review preview refuses an amount above the balance', $expectThrows(static fn () => $banking->previewBankTransfer((string) $alice['id'], 'EUR', '999999999.00', ['country_code' => 'GB', 'beneficiary_name' => 'Too Big', 'bank_name' => 'Test Bank', 'account_number' => '55667788'], '', 'local'), 'Insufficient'));
+
+// Saved beneficiaries: admin-published (global) and customer-saved (per user), matched exactly on the identifier.
+$beneficiaries = new \Wayfairs\Services\BeneficiaryService($database, $banking, new \Wayfairs\Services\Audit($database));
+$globalPayee = $beneficiaries->createGlobal(['route' => 'local', 'nickname' => 'Head office rent', 'country_code' => 'GB', 'beneficiary_name' => 'Head Office Ltd', 'bank_name' => 'Test Bank', 'account_number' => '55667788'], $adminId);
+$check('admin-published beneficiary is stored with only the last four visible', $globalPayee['identifier_last4'] === '7788' && $globalPayee['scope'] === 'global');
+$stored = $database->fetchOne('SELECT * FROM saved_beneficiaries WHERE id = ?', [$globalPayee['id']]);
+$check('beneficiary account number is not stored in plain text', !str_contains(json_encode($stored), '55667788') && !str_contains(json_encode($stored), '5566 7788'));
+$check('beneficiary lookup matches a spaced account number', $beneficiaries->findForUser((string) $bob['id'], 'local', '5566 7788')['beneficiary_name'] === 'Head Office Ltd');
+$check('beneficiary lookup never returns the account number', !array_key_exists('account_number', $beneficiaries->findForUser((string) $bob['id'], 'local', '55667788') ?? []) && !array_key_exists('iban', $beneficiaries->findForUser((string) $bob['id'], 'local', '55667788') ?? []));
+$check('a near-miss account number does not match', $beneficiaries->findForUser((string) $bob['id'], 'local', '55667789') === null);
+$check('a duplicate admin beneficiary is refused', $expectThrows(static fn () => $beneficiaries->createGlobal(['route' => 'local', 'nickname' => 'Again', 'country_code' => 'GB', 'beneficiary_name' => 'Head Office Ltd', 'bank_name' => 'Test Bank', 'account_number' => '5566 7788'], $adminId), 'already saved'));
+$check('an invalid IBAN is refused for a published beneficiary', $expectThrows(static fn () => $beneficiaries->createGlobal(['route' => 'iban', 'nickname' => 'Bad', 'country_code' => 'DE', 'beneficiary_name' => 'Nobody', 'bank_name' => 'Test Bank', 'iban' => 'NOT-AN-IBAN'], $adminId), 'IBAN'));
+$beneficiaries->saveFromTransfer((string) $alice['id'], ['country_code' => 'GB', 'beneficiary_name' => 'Ada Savings', 'bank_name' => 'Saver Bank', 'iban' => 'GB33BUKB20201555555555'], 'iban', 'Savings');
+$beneficiaries->saveFromTransfer((string) $alice['id'], ['country_code' => 'GB', 'beneficiary_name' => 'Ada Savings', 'bank_name' => 'Saver Bank', 'iban' => 'GB33BUKB20201555555555'], 'iban', 'Savings');
+$check('saving the same beneficiary twice keeps one record', (int) $database->fetchOne("SELECT COUNT(*) AS n FROM saved_beneficiaries WHERE owner_key = ? AND scope = 'user'", [(string) $alice['id']])['n'] === 1);
+$check('customer-saved beneficiary matches the owner with spaces and lower case', $beneficiaries->findForUser((string) $alice['id'], 'iban', 'gb33 bukb 2020 1555 5555 55')['nickname'] === 'Savings');
+$check('customer-saved beneficiary is private to its owner', $beneficiaries->findForUser((string) $bob['id'], 'iban', 'GB33BUKB20201555555555') === null);
+$check('a customer cannot archive an admin beneficiary', $expectThrows(static fn () => $beneficiaries->archive((string) $globalPayee['id'], (string) $alice['id'], false), 'not found'));
+$ownSaved = $database->fetchOne("SELECT id FROM saved_beneficiaries WHERE owner_key = ? AND scope = 'user'", [(string) $alice['id']]);
+$beneficiaries->archive((string) $ownSaved['id'], (string) $alice['id'], false);
+$check('archived beneficiary stops matching', $beneficiaries->findForUser((string) $alice['id'], 'iban', 'GB33BUKB20201555555555') === null);
 
 // Restriction enforcement and impersonation guard.
 (new \Wayfairs\Services\Restrictions($database))->apply((string) $alice['id'], 'internal_transfer', 'manual_review', 'Test restriction for verification', $adminId, null);

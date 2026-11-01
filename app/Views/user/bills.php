@@ -8,6 +8,9 @@ $fiatAccounts = array_values(array_filter($accounts, static fn (array $account):
 $firstAccount = $fiatAccounts[0] ?? null;
 $firstAsset = $firstAccount['asset'] ?? null;
 $countries = wayfairs_countries();
+$old = is_array($old ?? null) ? $old : [];
+$oldValue = static fn (string $key, string $default = ''): string => (string) ($old[$key] ?? $default);
+$route = $oldValue('transfer_route', 'iban') === 'local' ? 'local' : 'iban';
 ?>
 <header class="page-header">
   <div class="page-heading"><span class="page-icon"><?= wayfairs_icon('receipt') ?></span><div class="page-heading-copy"><span class="page-kicker">Utilities</span><h1>Pay a bill</h1><p>Send money to a utility, school, or service provider using the bank details printed on their invoice.</p></div></div>
@@ -24,7 +27,7 @@ $countries = wayfairs_countries();
     <?php elseif ($fiatAccounts === []): ?>
       <div class="empty-state"><div class="empty-icon"><?= wayfairs_icon('building') ?></div><h3>No account for bill payments</h3><p>No enabled fiat account currently accepts bill payments.</p></div>
     <?php else: ?>
-      <form class="stack" method="post" action="<?= e(wayfairs_url('/bills')) ?>" id="bill-payment-form">
+      <form class="stack" method="post" action="<?= e(wayfairs_url('/bills/review')) ?>" id="bill-payment-form">
         <input type="hidden" name="_token" value="<?= e(wayfairs_csrf()) ?>" />
         <input type="hidden" name="idem" value="<?= e(wayfairs_idem()) ?>" />
 
@@ -37,7 +40,7 @@ $countries = wayfairs_countries();
               <?php endforeach; ?>
             </select>
           </label>
-          <label>Amount<input name="amount" inputmode="decimal" placeholder="0.00" required <?= $verified ? '' : 'disabled' ?> /></label>
+          <label>Amount<input name="amount" inputmode="decimal" placeholder="0.00" value="<?= e($oldValue('amount')) ?>" required <?= $verified ? '' : 'disabled' ?> /></label>
         </div>
         <div class="selection-summary transfer-summary">
           <div class="summary-line"><small>Available balance</small><strong id="bill-available"><?= e($firstAccount ? wayfairs_amount((int) $firstAccount['available_minor'], (int) $firstAsset['scale'], (string) $firstAsset['symbol'], (string) $firstAsset['code']) : '—') ?></strong></div>
@@ -46,23 +49,23 @@ $countries = wayfairs_countries();
 
         <div class="form-section-title"><span>2</span><div><strong>Biller</strong><small>Use the name and bank shown on the bill.</small></div></div>
         <div class="form-grid">
-          <label>Biller country<select name="biller_country" required <?= $verified ? '' : 'disabled' ?>><option value="">Select country or territory</option><?php foreach ($countries as $code => $country): ?><option value="<?= e($code) ?>"><?= e($country) ?></option><?php endforeach; ?></select></label>
-          <label>Biller name<input name="biller_name" maxlength="160" placeholder="Name on the bill" required <?= $verified ? '' : 'disabled' ?> /></label>
-          <label>Biller bank<input name="biller_bank" maxlength="160" placeholder="Bank holding the biller's account" required <?= $verified ? '' : 'disabled' ?> /></label>
-          <label>Bill reference<input name="bill_reference" maxlength="120" placeholder="Account or invoice number on the bill" required <?= $verified ? '' : 'disabled' ?> /></label>
+          <label>Biller country<select name="biller_country" required <?= $verified ? '' : 'disabled' ?>><option value="">Select country or territory</option><?php foreach ($countries as $code => $country): ?><option value="<?= e($code) ?>" <?= $oldValue('biller_country') === $code ? 'selected' : '' ?>><?= e($country) ?></option><?php endforeach; ?></select></label>
+          <label>Biller name<input name="biller_name" maxlength="160" placeholder="Name on the bill" value="<?= e($oldValue('biller_name')) ?>" required <?= $verified ? '' : 'disabled' ?> /></label>
+          <label>Biller bank<input name="biller_bank" maxlength="160" placeholder="Bank holding the biller's account" value="<?= e($oldValue('biller_bank')) ?>" required <?= $verified ? '' : 'disabled' ?> /></label>
+          <label>Bill reference<input name="bill_reference" maxlength="120" placeholder="Account or invoice number on the bill" value="<?= e($oldValue('bill_reference')) ?>" required <?= $verified ? '' : 'disabled' ?> /></label>
         </div>
 
         <fieldset class="route-selector">
           <legend class="sr-only">Payment details</legend>
           <label class="route-option">
-            <input type="radio" name="transfer_route" value="iban" <?= $verified ? '' : 'disabled' ?> checked />
+            <input type="radio" name="transfer_route" value="iban" <?= $route === 'iban' ? 'checked' : '' ?> <?= $verified ? '' : 'disabled' ?> />
             <span class="route-body">
               <span class="route-icon"><?= wayfairs_icon('globe') ?></span>
               <span class="route-copy"><strong>IBAN</strong><small>The biller gave you an IBAN.</small></span>
             </span>
           </label>
           <label class="route-option">
-            <input type="radio" name="transfer_route" value="local" <?= $verified ? '' : 'disabled' ?> />
+            <input type="radio" name="transfer_route" value="local" <?= $route === 'local' ? 'checked' : '' ?> <?= $verified ? '' : 'disabled' ?> />
             <span class="route-body">
               <span class="route-icon"><?= wayfairs_icon('building') ?></span>
               <span class="route-copy"><strong>Account number</strong><small>The biller gave you a local account number.</small></span>
@@ -70,15 +73,15 @@ $countries = wayfairs_countries();
           </label>
         </fieldset>
         <div class="form-grid route-fields" data-route-group="iban">
-          <label>IBAN<input class="uppercase-input" name="iban" maxlength="34" placeholder="e.g. GB33BUKB20201555555555" autocomplete="off" <?= $verified ? '' : 'disabled' ?> /></label>
-          <label>SWIFT / BIC <span class="field-hint">Optional for some countries</span><input class="uppercase-input" name="swift_bic" maxlength="11" placeholder="AAAABBCCDDD" autocomplete="off" <?= $verified ? '' : 'disabled' ?> /></label>
+          <label>IBAN<input class="uppercase-input" name="iban" maxlength="34" placeholder="e.g. GB33BUKB20201555555555" autocomplete="off" value="<?= e($oldValue('iban')) ?>" <?= $verified ? '' : 'disabled' ?> /></label>
+          <label>SWIFT / BIC <span class="field-hint">Optional for some countries</span><input class="uppercase-input" name="swift_bic" maxlength="11" placeholder="AAAABBCCDDD" autocomplete="off" value="<?= e($oldValue('swift_bic')) ?>" <?= $verified ? '' : 'disabled' ?> /></label>
         </div>
         <div class="form-grid route-fields" data-route-group="local" hidden>
-          <label>Account number<input name="account_number" maxlength="40" autocomplete="off" <?= $verified ? '' : 'disabled' ?> /></label>
-          <label>Routing / sort / transit code <span class="field-hint">Optional</span><input name="routing_code" maxlength="40" autocomplete="off" <?= $verified ? '' : 'disabled' ?> /></label>
+          <label>Account number<input name="account_number" maxlength="40" autocomplete="off" value="<?= e($oldValue('account_number')) ?>" <?= $verified ? '' : 'disabled' ?> /></label>
+          <label>Routing / sort / transit code <span class="field-hint">Optional</span><input name="routing_code" maxlength="40" autocomplete="off" value="<?= e($oldValue('routing_code')) ?>" <?= $verified ? '' : 'disabled' ?> /></label>
         </div>
         <noscript><style>[data-route-group]{display:grid!important}</style><p class="field-hint route-noscript-note">JavaScript is turned off, so both the IBAN and account number fields are shown. Fill in the one the biller gave you and leave the other empty.</p></noscript>
-        <label>Note <span class="field-hint">Optional</span><input name="remark" maxlength="500" placeholder="Anything else the biller should know" <?= $verified ? '' : 'disabled' ?> /></label>
+        <label>Note <span class="field-hint">Optional</span><input name="remark" maxlength="500" placeholder="Anything else the biller should know" value="<?= e($oldValue('remark')) ?>" <?= $verified ? '' : 'disabled' ?> /></label>
         <div class="form-actions"><button class="btn full" type="submit" <?= $verified ? '' : 'disabled' ?>><?= $verified ? 'Pay bill' : 'Verification required' ?> <?= wayfairs_icon('arrow-right', 'btn-icon') ?></button></div>
       </form>
     <?php endif; ?>

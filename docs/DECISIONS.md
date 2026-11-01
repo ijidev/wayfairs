@@ -259,3 +259,29 @@ Flight booking is a request workflow: customers describe the trip, and an
 administrator moves it through requested, contacted, booked, declined, or
 cancelled. Nothing is priced, charged, or booked automatically. Requests need a
 verified identity. The admin status rules only move forward.
+
+## WDR-021 — Payments are reviewed before sending; beneficiaries are matched exactly
+
+Date: 2026-11-01
+
+Bank transfers and bill payments no longer submit directly. The form stores the
+entered details in a short-lived server-side draft (session store, 30-minute
+expiry, never in hidden fields) and shows a review page with every value that will
+be sent, including the held amount and the balance left afterwards. Confirming
+re-validates the same stored input, so the confirmed details are the reviewed
+details. A repeated confirm reuses the same idempotency token and does not create a
+second payment.
+
+Saved beneficiaries come in two scopes: administrator-published (visible to every
+customer) and customer-saved (private to the owner). Account identifiers are stored
+only inside encrypted details; a keyed hash supports lookup, and the last four
+digits support display. A lookup returns the saved details only on an exact match
+of the identifier, and never returns the identifier itself.
+
+Schema note: migration 001 already creates an unused `beneficiaries` table from the
+original design. Applied migrations are not edited, so the new table is
+`saved_beneficiaries` (migration 006). The old table stays empty and unused.
+
+Known limits: lookups are not yet rate-limited, so a customer could try many account
+numbers. Matching is exact and returns only the holder name and bank, but a limit
+should be added before public launch.

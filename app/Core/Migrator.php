@@ -143,6 +143,9 @@ final class Migrator
         if (preg_match('/^CREATE\s+TABLE\s+(\w+)/i', $statement, $match) === 1 && $this->tableExists($match[1])) {
             return null;
         }
+        if (preg_match('/^CREATE\s+(?:UNIQUE\s+)?INDEX\s+(\w+)/i', $statement, $match) === 1 && $this->indexExists($match[1])) {
+            return null;
+        }
         return $statement;
     }
 
@@ -161,6 +164,18 @@ final class Migrator
             }
         }
         return false;
+    }
+
+    private function indexExists(string $index): bool
+    {
+        if ($this->database->driver() === 'mysql') {
+            $row = $this->database->fetchOne(
+                'SELECT COUNT(*) AS total FROM information_schema.STATISTICS WHERE TABLE_SCHEMA = DATABASE() AND INDEX_NAME = ?',
+                [$index]
+            );
+            return (int) ($row['total'] ?? 0) > 0;
+        }
+        return $this->database->fetchOne("SELECT name FROM sqlite_master WHERE type = 'index' AND name = ?", [$index]) !== null;
     }
 
     private function tableExists(string $table): bool

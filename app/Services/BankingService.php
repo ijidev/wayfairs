@@ -123,7 +123,7 @@ final class BankingService
         return $this->createExternalRequest($userId, $account, $asset, $amount, $destination, $idempotencyToken, 'withdrawal', $remark);
     }
 
-    public function submitBankTransfer(string $userId, string $assetCode, string $amount, array $destination, string $idempotencyToken, string $remark = '', string $route = '', string $purpose = 'transfer'): array
+    private function prepareBankTransfer(string $userId, string $assetCode, string $amount, array $destination, string $remark, string $route): array
     {
         if (!Features::enabled($this->database, Features::BANK_TRANSFERS)) {
             throw new \RuntimeException('Bank transfers are not available on this account yet.');
@@ -136,6 +136,16 @@ final class BankingService
             throw new \RuntimeException('Bank transfers require a fiat currency account.');
         }
 
+        $clean = $this->cleanBankDestination($destination, $route);
+        return ['account' => $account, 'asset' => $asset, 'destination' => $clean, 'remark' => $this->cleanText($remark, 500)];
+    }
+
+    /**
+     * Validates and normalises beneficiary banking details. Shared by transfers,
+     * bill payments, and saved beneficiaries so every route applies the same rules.
+     */
+    public function cleanBankDestination(array $destination, string $route): array
+    {
         $beneficiaryName = $this->cleanText((string) ($destination['beneficiary_name'] ?? ''), 160);
         $bankName = $this->cleanText((string) ($destination['bank_name'] ?? ''), 160);
         $country = $this->compact((string) ($destination['country_code'] ?? ''));
@@ -208,8 +218,42 @@ final class BankingService
             }
         }
 
-        return $this->createExternalRequest($userId, $account, $asset, $amount, $clean, $idempotencyToken, 'bank_transfer', $remark, $purpose);
+        return $clean;
     }
+
+    public function previewBankTransfer(string $userId, string $assetCode, string $amount, array $destination, string $remark = '', string $route = ''): array
+    {
+        $prepared = $this->prepareBankTransfer($userId, $assetCode, $amount, $destination, $remark, $route);
+        $account = $prepared['account'];
+        $asset = $prepared['asset'];
+        $amountMinor = $this->positiveAmount($amount, (int) $asset['scale']);
+        if ($amountMinor < (int) $asset['min_withdrawal_minor']) {
+            throw new \RuntimeException('Transfer is below the minimum for this asset.');
+        }
+        $fee = (int) $asset['withdrawal_fee_minor'];
+        $total = $amountMinor + $fee;
+        $available = $this->ledger->accountBalance($account['id']);
+        if ($available < $total) {
+            throw new \RuntimeException('Insufficient available balance for this request and its fee.');
+        }
+        return [
+            'asset' => $asset,
+            'amount_minor' => $amountMinor,
+            'fee_minor' => $fee,
+            'total_minor' => $total,
+            'available_minor' => $available,
+            'available_after_minor' => $available - $total,
+            'destination' => $prepared['destination'],
+            'remark' => $prepared['remark'],
+        ];
+    }
+
+    public function submitBankTransfer(string $userId, string $assetCode, string $amount, array $destination, string $idempotencyToken, string $remark = '', string $route = '', string $purpose = 'transfer'): array
+    {
+        $prepared = $this->prepareBankTransfer($userId, $assetCode, $amount, $destination, $remark, $route);
+        return $this->createExternalRequest($userId, $prepared['account'], $prepared['asset'], $amount, $prepared['destination'], $idempotencyToken, 'bank_transfer', $prepared['remark'], $purpose);
+    }
+
 
     private function createExternalRequest(string $userId, array $account, array $asset, string $amount, array $destination, string $idempotencyToken, string $kind, string $remark, string $purpose = 'transfer'): array
     {

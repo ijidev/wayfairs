@@ -523,10 +523,40 @@ CREATE TABLE flight_requests (
   CHECK (travellers BETWEEN 1 AND 9)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+-- ==== migration 006_beneficiaries (source: 006_beneficiaries.sql) ====
+-- Saved beneficiaries: administrator-defined (scope 'global') and customer-saved
+-- (scope 'user'). The account identifier lives only inside the encrypted details;
+-- a keyed hash supports exact lookup and last four digits support display.
+CREATE TABLE saved_beneficiaries (
+  id CHAR(36) CHARACTER SET ascii COLLATE ascii_bin PRIMARY KEY,
+  owner_key VARCHAR(36) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+  scope ENUM('global','user') NOT NULL,
+  owner_user_id CHAR(36) CHARACTER SET ascii COLLATE ascii_bin NULL,
+  route ENUM('iban','local') NOT NULL,
+  nickname VARCHAR(80) NOT NULL,
+  country_code CHAR(2) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+  beneficiary_name VARCHAR(160) NOT NULL,
+  bank_name VARCHAR(160) NOT NULL,
+  identifier_hash CHAR(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+  identifier_last4 VARCHAR(4) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+  details_ciphertext LONGTEXT NOT NULL,
+  status ENUM('active','archived') NOT NULL DEFAULT 'active',
+  active_key VARCHAR(120) CHARACTER SET ascii COLLATE ascii_bin
+    GENERATED ALWAYS AS (CASE WHEN status = 'active' THEN CONCAT(owner_key, ':', identifier_hash) ELSE NULL END) STORED,
+  created_by CHAR(36) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+  created_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+  updated_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6) ON UPDATE CURRENT_TIMESTAMP(6),
+  CONSTRAINT saved_beneficiaries_owner_fk FOREIGN KEY (owner_user_id) REFERENCES users(id) ON DELETE RESTRICT,
+  CONSTRAINT saved_beneficiaries_creator_fk FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE RESTRICT,
+  UNIQUE KEY saved_beneficiaries_active_identifier_uq (active_key),
+  KEY saved_beneficiaries_owner_idx (owner_key, status)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 -- ==== migration ledger (matches the application checksums) ====
 INSERT INTO schema_migrations (version, checksum, applied_at) VALUES
     ('001_core', 'b005c9d14426caf95b8834c76c94d86a01ae14210a33766935160f30e67df25e', UTC_TIMESTAMP(6)),
     ('002_asset_deposit_details', 'c6ef9903920a6d1c37bdcea664cc5bbe05415612982808ad74053d02365dd84d', UTC_TIMESTAMP(6)),
     ('003_bank_transfers_and_usd_rates', '11b64eadc10a767c764dc4447384e5914dea97fc09890f91eda62597f6b3f5a9', UTC_TIMESTAMP(6)),
     ('004_bill_payments_and_open_limits', '4fda0fa746fe5c15e257b651bc68c284c44a6a98f16ca9a208235f8b05a5b72c', UTC_TIMESTAMP(6)),
-    ('005_flight_requests', '58d69c73fbcb972320ea7da2d5cb318669c8065b56baa714aa39058a537be8cc', UTC_TIMESTAMP(6));
+    ('005_flight_requests', '58d69c73fbcb972320ea7da2d5cb318669c8065b56baa714aa39058a537be8cc', UTC_TIMESTAMP(6)),
+    ('006_beneficiaries', '666910da50905d190ae8b7a990376ef29bb37cf945374df1d00c28dee6d11dd5', UTC_TIMESTAMP(6));

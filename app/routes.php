@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use Wayfairs\Core\Context;
 use Wayfairs\Core\Database;
+use Wayfairs\Core\Draft;
 use Wayfairs\Core\Flash;
 use Wayfairs\Core\Money;
 use Wayfairs\Core\Request;
@@ -14,6 +15,7 @@ use Wayfairs\Core\View;
 use Wayfairs\Services\Audit;
 use Wayfairs\Services\AuthService;
 use Wayfairs\Services\BankingService;
+use Wayfairs\Services\BeneficiaryService;
 use Wayfairs\Services\Features;
 use Wayfairs\Services\FlightService;
 use Wayfairs\Services\KycService;
@@ -31,6 +33,7 @@ return function (Router $router, Database $database): void {
     $restrictions = new Restrictions($database);
     $audit = new Audit($database);
     $flights = new FlightService($database, $audit);
+    $beneficiaries = new BeneficiaryService($database, $banking, $audit);
     $rates = new UsdRateService($database);
 
     $page = static fn (string $view, array $data = []) => View::render($view, $data, 'layouts/app');
@@ -201,12 +204,14 @@ return function (Router $router, Database $database): void {
         $attempt(static fn () => $banking->submitWithdrawal((string) $user['id'], (string) $request->post('asset_code', ''), (string) $request->post('amount', ''), $destination, (string) $request->post('idem', ''), (string) $request->post('remark', '')), 'Withdrawal submitted. The amount is reserved until it is processed.', '/withdraw');
     }, 'auth', true);
 
-    $router->get('/transfer', static function () use ($page, $banking, $ledger, $accountRows, $me, $database, $kyc, $rates): void {
+    $router->get('/transfer', static function () use ($page, $banking, $ledger, $accountRows, $me, $database, $kyc, $rates, $beneficiaries): void {
         $user = $me();
         $accounts = $accountRows($banking, $ledger, $database, (string) $user['id']);
         $page('user/transfer', [
             'accounts' => $accounts,
             'bankTransfersEnabled' => Features::enabled($database, Features::BANK_TRANSFERS),
+            'old' => Draft::get('form.transfer') ?? [],
+            'beneficiaries' => $beneficiaries->listFor((string) $user['id']),
             'bankTransfers' => $database->fetchAll("SELECT w.*, a.account_number, s.code AS asset_code, s.scale AS asset_scale, s.symbol AS asset_symbol FROM withdrawal_requests w JOIN accounts a ON a.id = w.account_id JOIN assets s ON s.id = a.asset_id WHERE w.user_id = ? AND w.request_kind = 'bank_transfer' AND w.payment_purpose = 'transfer' ORDER BY w.created_at DESC LIMIT 50", [(string) $user['id']]),
             'internalTransfers' => $database->fetchAll('SELECT t.*, s.code AS asset_code, s.scale AS asset_scale, s.symbol AS asset_symbol, su.email AS sender_email, ru.email AS recipient_email FROM transfers t JOIN assets s ON s.id = t.asset_id JOIN users su ON su.id = t.sender_user_id JOIN users ru ON ru.id = t.recipient_user_id WHERE t.sender_user_id = ? OR t.recipient_user_id = ? ORDER BY t.created_at DESC LIMIT 50', [(string) $user['id'], (string) $user['id']]),
             'me' => (string) $user['id'],
@@ -215,17 +220,132 @@ return function (Router $router, Database $database): void {
         ]);
     }, 'auth');
 
-    $router->post('/transfer', static function (Request $request) use ($banking, $attempt): never {
-        $user = Context::user() ?? [];
-        $destination = [];
-        foreach (['country_code', 'beneficiary_name', 'beneficiary_address', 'bank_name', 'bank_address', 'iban', 'account_number', 'routing_code', 'swift_bic'] as $field) {
-            $value = trim((string) $request->post($field, ''));
-            if ($value !== '') {
-                $destination[$field] = $value;
-            }
+    $movementInput = static function (Request $request, string $kind): array {
+        $fields = $kind === 'bill'
+            ? ['biller_country', 'biller_name', 'biller_address', 'biller_bank', 'iban', 'account_number', 'routing_code', 'swift_bic', 'bill_reference', 'remark']
+            : ['country_code', 'beneficiary_name', 'beneficiary_address', 'bank_name', 'bank_address', 'iban', 'account_number', 'routing_code', 'swift_bic', 'remark'];
+        $input = [];
+        foreach (array_merge($fields, ['asset_code', 'amount', 'transfer_route', 'save_beneficiary', 'nickname']) as $field) {
+            $input[$field] = trim((string) $request->post($field, ''));
         }
-        $attempt(static fn () => $banking->submitBankTransfer((string) $user['id'], (string) $request->post('asset_code', 'USD'), (string) $request->post('amount', ''), $destination, (string) $request->post('idem', ''), (string) $request->post('remark', ''), (string) $request->post('transfer_route', '')), 'Bank transfer submitted. Funds are reserved while it is processed.', '/transfer');
+        return $input;
+    };
+
+    $movementDestination = static function (array $input, string $kind): array {
+        if ($kind === 'bill') {
+            $destination = [
+                'country_code' => $input['biller_country'], 'beneficiary_name' => $input['biller_name'], 'beneficiary_address' => $input['biller_address'],
+                'bank_name' => $input['biller_bank'], 'iban' => $input['iban'], 'account_number' => $input['account_number'],
+                'routing_code' => $input['routing_code'], 'swift_bic' => $input['swift_bic'],
+            ];
+            $note = $input['remark'];
+            $remark = $input['bill_reference'] !== '' ? 'Bill reference ' . $input['bill_reference'] . ($note !== '' ? ' · ' . $note : '') : $note;
+        } else {
+            $destination = [
+                'country_code' => $input['country_code'], 'beneficiary_name' => $input['beneficiary_name'], 'beneficiary_address' => $input['beneficiary_address'],
+                'bank_name' => $input['bank_name'], 'bank_address' => $input['bank_address'], 'iban' => $input['iban'],
+                'account_number' => $input['account_number'], 'routing_code' => $input['routing_code'], 'swift_bic' => $input['swift_bic'],
+            ];
+            $remark = $input['remark'];
+        }
+        return [array_filter($destination, static fn ($value) => $value !== ''), $remark];
+    };
+
+    $reviewMovement = static function (Request $request, string $kind) use ($banking, $movementInput, $movementDestination): never {
+        $user = Context::user() ?? [];
+        $back = $kind === 'bill' ? '/bills' : '/transfer';
+        $input = $movementInput($request, $kind);
+        Draft::put('form.' . $kind, $input);
+        try {
+            [$destination, $remark] = $movementDestination($input, $kind);
+            $banking->previewBankTransfer((string) $user['id'], $input['asset_code'] ?: 'USD', $input['amount'], $destination, $remark, $input['transfer_route']);
+            Draft::put('review.' . $kind, $input + ['idem' => Security::token(16)]);
+            Response::redirect($kind === 'bill' ? '/bills/review' : '/transfer/review');
+        } catch (RuntimeException | InvalidArgumentException $error) {
+            Flash::put('error', $error->getMessage());
+        } catch (Throwable $error) {
+            $reference = Context::requestId();
+            error_log(sprintf('[wayfairs] request=%s %s: %s in %s:%d', $reference, $error::class, $error->getMessage(), $error->getFile(), $error->getLine()));
+            Flash::put('error', 'That did not complete. Please try again. Reference: ' . $reference);
+        }
+        Response::redirect($back);
+    };
+
+    $showReview = static function (string $kind) use ($page, $banking, $movementDestination): void {
+        $user = Context::user() ?? [];
+        $back = $kind === 'bill' ? '/bills' : '/transfer';
+        $input = Draft::get('review.' . $kind);
+        if ($input === null) {
+            Flash::put('error', 'This review has expired. Enter the details again.');
+            Response::redirect($back);
+        }
+        try {
+            [$destination, $remark] = $movementDestination($input, $kind);
+            $preview = $banking->previewBankTransfer((string) $user['id'], $input['asset_code'] ?: 'USD', $input['amount'], $destination, $remark, $input['transfer_route']);
+        } catch (RuntimeException | InvalidArgumentException $error) {
+            Flash::put('error', $error->getMessage());
+            Response::redirect($back);
+        }
+        $page('user/review', ['kind' => $kind, 'preview' => $preview, 'input' => $input, 'countries' => wayfairs_countries()]);
+    };
+
+    $confirmMovement = static function (string $kind) use ($banking, $attempt, $movementDestination, $beneficiaries): never {
+        $user = Context::user() ?? [];
+        $back = $kind === 'bill' ? '/bills' : '/transfer';
+        $input = Draft::take('review.' . $kind);
+        if ($input === null) {
+            Flash::put('error', 'This review has expired. Enter the details again.');
+            Response::redirect($back);
+        }
+        $attempt(static function () use ($banking, $movementDestination, $beneficiaries, $user, $kind, $input): void {
+            [$destination, $remark] = $movementDestination($input, $kind);
+            $route = $input['transfer_route'] === 'local' ? 'local' : 'iban';
+            $banking->submitBankTransfer((string) $user['id'], $input['asset_code'] ?: 'USD', $input['amount'], $destination, (string) $input['idem'], $remark, $route, $kind === 'bill' ? 'bill' : 'transfer');
+            if ($kind === 'transfer' && $input['save_beneficiary'] === '1') {
+                $beneficiaries->saveFromTransfer((string) $user['id'], $destination, $route, $input['nickname']);
+            }
+            Draft::forget('form.' . $kind);
+        }, $kind === 'bill' ? 'Bill payment submitted. Funds are held while it is processed.' : 'Bank transfer submitted. Funds are held while it is processed.', $back);
+    };
+
+    $router->get('/transfer/review', static fn () => $showReview('transfer'), 'auth');
+    $router->get('/bills/review', static fn () => $showReview('bill'), 'auth');
+    $router->post('/transfer/review', static fn (Request $request) => $reviewMovement($request, 'transfer'), 'auth', true);
+    $router->post('/bills/review', static fn (Request $request) => $reviewMovement($request, 'bill'), 'auth', true);
+    $router->post('/transfer/confirm', static fn () => $confirmMovement('transfer'), 'auth', true);
+    $router->post('/bills/confirm', static fn () => $confirmMovement('bill'), 'auth', true);
+
+    $router->get('/transfer/beneficiary', static function (Request $request) use ($beneficiaries): never {
+        $user = Context::user() ?? [];
+        $route = (string) $request->input('route', '');
+        $identifier = (string) $request->input('identifier', '');
+        if (!in_array($route, ['iban', 'local'], true) || $identifier === '' || strlen($identifier) > 40) {
+            Response::json(['found' => false]);
+        }
+        $match = $beneficiaries->findForUser((string) $user['id'], $route, $identifier);
+        Response::json(['found' => $match !== null, 'beneficiary' => $match]);
+    }, 'auth');
+
+    $router->post('/beneficiaries/{id}/archive', static function (Request $request) use ($beneficiaries, $attempt): never {
+        $user = Context::user() ?? [];
+        $attempt(static fn () => $beneficiaries->archive((string) $request->route('id'), (string) $user['id'], false), 'Beneficiary removed.', '/transfer');
     }, 'auth', true);
+
+    $router->get('/admin/beneficiaries', static function () use ($admin, $beneficiaries): void {
+        $admin('admin/beneficiaries', ['beneficiaries' => $beneficiaries->listAllGlobal()]);
+    }, 'admin');
+
+    $router->post('/admin/beneficiaries', static function (Request $request) use ($beneficiaries, $attempt): never {
+        $input = [];
+        foreach (['route', 'nickname', 'country_code', 'beneficiary_name', 'beneficiary_address', 'bank_name', 'bank_address', 'iban', 'account_number', 'swift_bic', 'routing_code'] as $field) {
+            $input[$field] = trim((string) $request->post($field, ''));
+        }
+        $attempt(static fn () => $beneficiaries->createGlobal($input, (string) Context::user()['id']), 'Beneficiary published to customers.', '/admin/beneficiaries');
+    }, 'admin', true);
+
+    $router->post('/admin/beneficiaries/{id}/archive', static function (Request $request) use ($beneficiaries, $attempt): never {
+        $attempt(static fn () => $beneficiaries->archive((string) $request->route('id'), (string) Context::user()['id'], true), 'Beneficiary archived.', '/admin/beneficiaries');
+    }, 'admin', true);
 
     $router->get('/bills', static function () use ($page, $banking, $ledger, $accountRows, $me, $database, $kyc, $rates): void {
         $user = $me();
@@ -233,36 +353,12 @@ return function (Router $router, Database $database): void {
         $page('user/bills', [
             'accounts' => $accounts,
             'bankTransfersEnabled' => Features::enabled($database, Features::BANK_TRANSFERS),
+            'old' => Draft::get('form.bill') ?? [],
             'bills' => $database->fetchAll("SELECT w.*, a.account_number, s.code AS asset_code, s.scale AS asset_scale, s.symbol AS asset_symbol FROM withdrawal_requests w JOIN accounts a ON a.id = w.account_id JOIN assets s ON s.id = a.asset_id WHERE w.user_id = ? AND w.request_kind = 'bank_transfer' AND w.payment_purpose = 'bill' ORDER BY w.created_at DESC LIMIT 50", [(string) $user['id']]),
             'kyc' => $kyc->profile((string) $user['id']),
             'usdRates' => $rates->ratesForAssets(array_column($accounts, 'asset')),
         ]);
     }, 'auth');
-
-    $router->post('/bills', static function (Request $request) use ($banking, $attempt): never {
-        $user = Context::user() ?? [];
-        $destination = [];
-        $fields = [
-            'country_code' => 'biller_country',
-            'beneficiary_name' => 'biller_name',
-            'beneficiary_address' => 'biller_address',
-            'bank_name' => 'biller_bank',
-            'iban' => 'iban',
-            'account_number' => 'account_number',
-            'routing_code' => 'routing_code',
-            'swift_bic' => 'swift_bic',
-        ];
-        foreach ($fields as $field => $input) {
-            $value = trim((string) $request->post($input, ''));
-            if ($value !== '') {
-                $destination[$field] = $value;
-            }
-        }
-        $reference = trim((string) $request->post('bill_reference', ''));
-        $note = trim((string) $request->post('remark', ''));
-        $remark = $reference !== '' ? 'Bill reference ' . $reference . ($note !== '' ? ' · ' . $note : '') : $note;
-        $attempt(static fn () => $banking->submitBankTransfer((string) $user['id'], (string) $request->post('asset_code', 'USD'), (string) $request->post('amount', ''), $destination, (string) $request->post('idem', ''), $remark, (string) $request->post('transfer_route', ''), 'bill'), 'Bill payment submitted. Funds are reserved while it is processed.', '/bills');
-    }, 'auth', true);
 
     $router->get('/utilities', static function () use ($page, $database): void {
         $page('user/utilities', [

@@ -17,6 +17,7 @@ $links = [
     ['path' => '/admin/deposits', 'label' => 'Deposits', 'icon' => 'deposit'],
     ['path' => '/admin/withdrawals', 'label' => 'Withdrawals', 'icon' => 'withdraw'],
     ['path' => '/admin/flights', 'label' => 'Flight requests', 'icon' => 'globe'],
+    ['path' => '/admin/beneficiaries', 'label' => 'Beneficiaries', 'icon' => 'building'],
     ['path' => '/admin/assets', 'label' => 'Currencies', 'icon' => 'layers'],
     ['path' => '/admin/settings', 'label' => 'Site information', 'icon' => 'settings'],
     ['path' => '/admin/audit', 'label' => 'Audit log', 'icon' => 'audit'],
