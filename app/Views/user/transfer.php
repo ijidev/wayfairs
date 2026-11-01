@@ -67,10 +67,6 @@ $beneficiaries = $beneficiaries ?? [];
             </span>
           </label>
         </fieldset>
-        <div class="form-grid">
-          <label>Bank name<input name="bank_name" id="transfer-bank-name" maxlength="160" autocomplete="organization" value="<?= e($oldValue('bank_name')) ?>" required <?= $disabled ?> /></label>
-          <label>Bank address <span class="field-hint">Optional</span><input name="bank_address" id="transfer-bank-address" maxlength="300" value="<?= e($oldValue('bank_address')) ?>" <?= $disabled ?> /></label>
-        </div>
         <div class="form-grid route-fields" data-route-group="iban" <?= $route === 'iban' ? '' : 'hidden' ?>>
           <label>IBAN<input class="uppercase-input" name="iban" id="transfer-iban" maxlength="48" placeholder="e.g. GB33BUKB20201555555555" autocomplete="off" value="<?= e($oldValue('iban')) ?>" <?= $disabled ?> /></label>
           <label>SWIFT / BIC <span class="field-hint">Optional for some countries</span><input class="uppercase-input" name="swift_bic" id="transfer-swift" maxlength="11" placeholder="AAAABBCCDDD" autocomplete="off" value="<?= e($oldValue('swift_bic')) ?>" <?= $disabled ?> /></label>
@@ -78,6 +74,10 @@ $beneficiaries = $beneficiaries ?? [];
         <div class="form-grid route-fields" data-route-group="local" <?= $route === 'local' ? '' : 'hidden' ?>>
           <label>Account number<input name="account_number" id="transfer-account" maxlength="40" inputmode="numeric" autocomplete="off" value="<?= e($oldValue('account_number')) ?>" <?= $disabled ?> /></label>
           <label>Routing / sort / transit code <span class="field-hint">Optional</span><input name="routing_code" id="transfer-routing" maxlength="40" autocomplete="off" value="<?= e($oldValue('routing_code')) ?>" <?= $disabled ?> /></label>
+        </div>
+        <div class="form-grid">
+          <label>Bank name<input name="bank_name" id="transfer-bank-name" maxlength="160" autocomplete="organization" value="<?= e($oldValue('bank_name')) ?>" required <?= $disabled ?> /></label>
+          <label>Bank address <span class="field-hint">Optional</span><input name="bank_address" id="transfer-bank-address" maxlength="300" value="<?= e($oldValue('bank_address')) ?>" <?= $disabled ?> /></label>
         </div>
         <div class="form-section-title"><span>3</span><div><strong>Beneficiary</strong><small>Enter the legal recipient details held by their bank.</small></div></div>
         <div class="form-grid">
