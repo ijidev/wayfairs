@@ -313,16 +313,35 @@ return function (Router $router, Database $database): void {
             Draft::put('otp.' . $kind, ['id' => $otpId, 'input' => $input]);
             Response::redirect($kind === 'bill' ? '/bills/otp' : '/transfer/otp');
         }
-        $attempt(static function () use ($banking, $movementDestination, $beneficiaries, $user, $kind, $input): void {
+        try {
             [$destination, $remark] = $movementDestination($input, $kind);
             $route = $input['transfer_route'] === 'local' ? 'local' : 'iban';
-            $banking->submitBankTransfer((string) $user['id'], $input['asset_code'] ?: 'USD', $input['amount'], $destination, (string) $input['idem'], $remark, $route, $kind === 'bill' ? 'bill' : 'transfer');
+            $result = $banking->submitBankTransfer((string) $user['id'], $input['asset_code'] ?: 'USD', $input['amount'], $destination, (string) $input['idem'], $remark, $route, $kind === 'bill' ? 'bill' : 'transfer');
             if ($kind === 'transfer' && $input['save_beneficiary'] === '1') {
                 $beneficiaries->saveFromTransfer((string) $user['id'], $destination, $route, $input['nickname']);
             }
             Draft::forget('form.' . $kind);
             Draft::forget('review.' . $kind);
-        }, $kind === 'bill' ? 'Bill payment submitted. Funds are held while it is processed.' : 'Bank transfer submitted. Funds are held while it is processed.', $back);
+            Draft::forget('otp.' . $kind);
+            Flash::put('success', $kind === 'bill' ? 'Bill payment submitted. Funds are held while it is processed.' : 'Bank transfer submitted. Funds are held while it is processed.');
+            $transactionId = (string) ($result['transaction_id'] ?? '');
+            if ($transactionId !== '') {
+                Response::redirect('/receipts/' . $transactionId);
+            }
+            Response::redirect($back);
+        } catch (\PDOException $error) {
+            error_log('[wayfairs] database error: ' . $error->getMessage());
+            Flash::put('error', 'That request could not be saved. Please try again in a moment.');
+            Response::redirect($back);
+        } catch (RuntimeException | InvalidArgumentException $error) {
+            Flash::put('error', $error->getMessage());
+            Response::redirect($back);
+        } catch (Throwable $error) {
+            $reference = Context::requestId();
+            error_log(sprintf('[wayfairs] request=%s %s: %s in %s:%d', $reference, $error::class, $error->getMessage(), $error->getFile(), $error->getLine()));
+            Flash::put('error', 'That did not complete. Please try again. Reference: ' . $reference);
+            Response::redirect($back);
+        }
     };
 
     $router->get('/transfer/review', static fn () => $showReview('transfer'), 'auth');
