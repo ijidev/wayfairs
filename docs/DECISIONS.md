@@ -221,3 +221,41 @@ value in the other field is ignored; IBAN and account numbers accept pasted
 spaces, hyphens and dots; free text is cleaned to valid UTF-8 before encryption.
 Migration 004 also clears the untouched seeded minimum deposit and withdrawal
 (USD 10, BTC and ETH floors), and new installs seed none.
+
+## WDR-019 — Bank-detail encryption falls back to OpenSSL AES-256-GCM
+
+Date: 2026-11-01
+
+Beneficiary bank details were encrypted only with libsodium. On hosts without
+the sodium extension, every bank transfer and bill payment failed. Those hosts
+still provide OpenSSL, which is already a required extension.
+
+Decision: `Security::encrypt` uses libsodium `secretbox` when it is available,
+which keeps every existing record and working server unchanged. When sodium is
+missing it uses OpenSSL AES-256-GCM with a random 96-bit IV and a 128-bit tag,
+keyed by the same 32-byte application key. Those records are stored with a
+`gcm1:` prefix. Decryption reads either format; a sodium record on a server that
+lacks sodium is refused with a clear message rather than failing silently.
+
+Security properties are unchanged: the cipher is authenticated, the IV is fresh
+per record, plaintext never leaves the server, and a tampered record is refused.
+The project rule that names Sodium should now read "Sodium, or OpenSSL AES-256-GCM
+where sodium is unavailable". That wording change is awaiting owner approval in
+AGENTS.md.
+
+Verified: unit tests cover both formats, tamper refusal, and the legacy sodium
+path. A full transfer and bill run passed with sodium present and again with
+sodium disabled through PHP's `disable_functions`.
+
+## WDR-020 — Administrator switch for transfers; flight requests are reviewed by hand
+
+Date: 2026-11-01
+
+Bank transfers and bill payments stay off until an administrator turns them on
+under Site information → Payments. Turning them on is refused when the server
+cannot encrypt bank details. The switch defaults to off on every install.
+
+Flight booking is a request workflow: customers describe the trip, and an
+administrator moves it through requested, contacted, booked, declined, or
+cancelled. Nothing is priced, charged, or booked automatically. Requests need a
+verified identity. The admin status rules only move forward.

@@ -6,6 +6,26 @@ declare(strict_types=1);
   <div class="page-heading"><span class="page-icon"><?= wayfairs_icon('settings') ?></span><div class="page-heading-copy"><span class="page-kicker">Public configuration</span><h1>Site information</h1><p>Manage the brand, support details, and customer-facing operational notices stored by Wayfairs.</p></div></div>
 </header>
 
+<?php $missingExtensions = $missingExtensions ?? []; $canEnable = $missingExtensions === []; $bankTransfersEnabled = (bool) ($bankTransfersEnabled ?? false); ?>
+<section class="card settings-section static">
+  <div class="settings-section-copy"><span class="page-icon"><?= wayfairs_icon('transfer') ?></span><h2>Payments</h2><p>Bank transfers and bill payments send money to outside bank accounts. Turn them on once this server is ready.</p></div>
+  <div class="settings-fields">
+    <div class="summary-line"><small>Bank transfers and bill payments</small><?= wayfairs_pill($bankTransfersEnabled ? 'enabled' : 'disabled') ?></div>
+    <?php if (!$canEnable): ?>
+      <div class="notice warn"><?= wayfairs_icon('security') ?><div><strong>This server cannot store bank details yet</strong><p>Missing PHP extension: <?= e(implode(', ', $missingExtensions)) ?>. Ask your host to enable it, then return here.</p></div></div>
+    <?php endif; ?>
+    <form method="post" action="<?= e(wayfairs_url('/admin/features/bank-transfers')) ?>">
+      <input type="hidden" name="_token" value="<?= e(wayfairs_csrf()) ?>" />
+      <input type="hidden" name="enabled" value="<?= $bankTransfersEnabled ? '0' : '1' ?>" />
+      <?php if ($bankTransfersEnabled): ?>
+        <button class="btn ghost" type="submit">Turn off bank transfers</button>
+      <?php else: ?>
+        <button class="btn" type="submit" <?= $canEnable ? '' : 'disabled' ?>>Turn on bank transfers</button>
+      <?php endif; ?>
+    </form>
+  </div>
+</section>
+
 <form class="settings-form" method="post" action="<?= e(wayfairs_url('/admin/settings')) ?>">
   <input type="hidden" name="_token" value="<?= e(wayfairs_csrf()) ?>" />
   <section class="card settings-section static">

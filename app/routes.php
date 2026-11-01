@@ -14,6 +14,8 @@ use Wayfairs\Core\View;
 use Wayfairs\Services\Audit;
 use Wayfairs\Services\AuthService;
 use Wayfairs\Services\BankingService;
+use Wayfairs\Services\Features;
+use Wayfairs\Services\FlightService;
 use Wayfairs\Services\KycService;
 use Wayfairs\Services\LedgerService;
 use Wayfairs\Services\Restrictions;
@@ -28,6 +30,7 @@ return function (Router $router, Database $database): void {
     $kyc = new KycService($database);
     $restrictions = new Restrictions($database);
     $audit = new Audit($database);
+    $flights = new FlightService($database, $audit);
     $rates = new UsdRateService($database);
 
     $page = static fn (string $view, array $data = []) => View::render($view, $data, 'layouts/app');
@@ -203,6 +206,7 @@ return function (Router $router, Database $database): void {
         $accounts = $accountRows($banking, $ledger, $database, (string) $user['id']);
         $page('user/transfer', [
             'accounts' => $accounts,
+            'bankTransfersEnabled' => Features::enabled($database, Features::BANK_TRANSFERS),
             'bankTransfers' => $database->fetchAll("SELECT w.*, a.account_number, s.code AS asset_code, s.scale AS asset_scale, s.symbol AS asset_symbol FROM withdrawal_requests w JOIN accounts a ON a.id = w.account_id JOIN assets s ON s.id = a.asset_id WHERE w.user_id = ? AND w.request_kind = 'bank_transfer' AND w.payment_purpose = 'transfer' ORDER BY w.created_at DESC LIMIT 50", [(string) $user['id']]),
             'internalTransfers' => $database->fetchAll('SELECT t.*, s.code AS asset_code, s.scale AS asset_scale, s.symbol AS asset_symbol, su.email AS sender_email, ru.email AS recipient_email FROM transfers t JOIN assets s ON s.id = t.asset_id JOIN users su ON su.id = t.sender_user_id JOIN users ru ON ru.id = t.recipient_user_id WHERE t.sender_user_id = ? OR t.recipient_user_id = ? ORDER BY t.created_at DESC LIMIT 50', [(string) $user['id'], (string) $user['id']]),
             'me' => (string) $user['id'],
@@ -228,6 +232,7 @@ return function (Router $router, Database $database): void {
         $accounts = $accountRows($banking, $ledger, $database, (string) $user['id']);
         $page('user/bills', [
             'accounts' => $accounts,
+            'bankTransfersEnabled' => Features::enabled($database, Features::BANK_TRANSFERS),
             'bills' => $database->fetchAll("SELECT w.*, a.account_number, s.code AS asset_code, s.scale AS asset_scale, s.symbol AS asset_symbol FROM withdrawal_requests w JOIN accounts a ON a.id = w.account_id JOIN assets s ON s.id = a.asset_id WHERE w.user_id = ? AND w.request_kind = 'bank_transfer' AND w.payment_purpose = 'bill' ORDER BY w.created_at DESC LIMIT 50", [(string) $user['id']]),
             'kyc' => $kyc->profile((string) $user['id']),
             'usdRates' => $rates->ratesForAssets(array_column($accounts, 'asset')),
@@ -257,6 +262,33 @@ return function (Router $router, Database $database): void {
         $note = trim((string) $request->post('remark', ''));
         $remark = $reference !== '' ? 'Bill reference ' . $reference . ($note !== '' ? ' · ' . $note : '') : $note;
         $attempt(static fn () => $banking->submitBankTransfer((string) $user['id'], (string) $request->post('asset_code', 'USD'), (string) $request->post('amount', ''), $destination, (string) $request->post('idem', ''), $remark, (string) $request->post('transfer_route', ''), 'bill'), 'Bill payment submitted. Funds are reserved while it is processed.', '/bills');
+    }, 'auth', true);
+
+    $router->get('/utilities', static function () use ($page, $database): void {
+        $page('user/utilities', [
+            'bankTransfersEnabled' => Features::enabled($database, Features::BANK_TRANSFERS),
+        ]);
+    }, 'auth');
+
+    $router->get('/flights', static function () use ($page, $database, $me, $kyc, $flights): void {
+        $user = $me();
+        $page('user/flights', [
+            'kyc' => $kyc->profile((string) $user['id']),
+            'requests' => $flights->forUser((string) $user['id']),
+        ]);
+    }, 'auth');
+
+    $router->post('/flights', static function (Request $request) use ($flights, $attempt): never {
+        $user = Context::user() ?? [];
+        $attempt(static fn () => $flights->create((string) $user['id'], [
+            'origin' => $request->post('origin', ''),
+            'destination' => $request->post('destination', ''),
+            'departure_date' => $request->post('departure_date', ''),
+            'return_date' => $request->post('return_date', ''),
+            'travellers' => $request->post('travellers', ''),
+            'cabin' => $request->post('cabin', ''),
+            'notes' => $request->post('notes', ''),
+        ], (string) $request->post('idem', '')), 'Flight request sent. We will contact you to confirm availability and price.', '/flights');
     }, 'auth', true);
 
     $router->post('/transfer/internal', static function (Request $request) use ($banking, $attempt): never {
@@ -587,9 +619,33 @@ return function (Router $router, Database $database): void {
         }, 'Bank transfer decision recorded.', '/admin/bank-transfers');
     }, 'admin', true);
 
-    $router->get('/admin/settings', static function () use ($admin): void {
-        $admin('admin/settings', ['values' => wayfairs_public_settings()]);
+    $router->get('/admin/flights', static function () use ($admin, $flights): void {
+        $admin('admin/flights', ['requests' => $flights->forAdmin()]);
     }, 'admin');
+
+    $router->post('/admin/flights/{id}/status', static function (Request $request) use ($flights, $attempt): never {
+        $id = (string) $request->route('id');
+        $attempt(static fn () => $flights->decide($id, (string) $request->post('status', ''), (string) $request->post('admin_note', ''), (string) Context::user()['id']), 'Flight request updated.', '/admin/flights');
+    }, 'admin', true);
+
+    $router->get('/admin/settings', static function () use ($admin, $database): void {
+        $admin('admin/settings', [
+            'values' => wayfairs_public_settings(),
+            'bankTransfersEnabled' => Features::enabled($database, Features::BANK_TRANSFERS),
+            'missingExtensions' => Security::missingServerExtensions(),
+        ]);
+    }, 'admin');
+
+    $router->post('/admin/features/bank-transfers', static function (Request $request) use ($settings, $audit, $attempt): never {
+        $attempt(static function () use ($settings, $audit, $request): void {
+            $enable = (string) $request->post('enabled', '0') === '1';
+            if ($enable) {
+                Security::assertServerReady();
+            }
+            $settings->update(Features::BANK_TRANSFERS, $enable ? '1' : '0', (string) Context::user()['id'], false);
+            $audit->record($enable ? 'feature.bank_transfers.enabled' : 'feature.bank_transfers.disabled', 'site_setting', Features::BANK_TRANSFERS, null, []);
+        }, 'Bank transfer setting saved.', '/admin/settings');
+    }, 'admin', true);
 
     $router->post('/admin/settings', static function (Request $request) use ($settings, $audit, $attempt): never {
         $attempt(static function () use ($settings, $audit, $request): void {

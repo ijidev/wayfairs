@@ -125,6 +125,9 @@ final class BankingService
 
     public function submitBankTransfer(string $userId, string $assetCode, string $amount, array $destination, string $idempotencyToken, string $remark = '', string $route = '', string $purpose = 'transfer'): array
     {
+        if (!Features::enabled($this->database, Features::BANK_TRANSFERS)) {
+            throw new \RuntimeException('Bank transfers are not available on this account yet.');
+        }
         Security::assertServerReady();
         $account = $this->accountFor($userId, $assetCode);
         $asset = $account['asset'];

@@ -19,7 +19,9 @@ $countries = wayfairs_countries();
 <section class="content-grid">
   <article class="card form-card bank-transfer-form">
     <div class="form-intro"><span class="page-kicker">New bill payment</span><h2>Biller details</h2><p>Enter the biller's bank details and the reference from your bill so they can match your payment.</p></div>
-    <?php if ($fiatAccounts === []): ?>
+    <?php if (empty($bankTransfersEnabled)): ?>
+      <div class="empty-state"><div class="empty-icon"><?= wayfairs_icon('receipt') ?></div><h3>Bill payments are not available yet</h3><p>Paying billers by bank transfer is not switched on for this account.</p></div>
+    <?php elseif ($fiatAccounts === []): ?>
       <div class="empty-state"><div class="empty-icon"><?= wayfairs_icon('building') ?></div><h3>No account for bill payments</h3><p>No enabled fiat account currently accepts bill payments.</p></div>
     <?php else: ?>
       <form class="stack" method="post" action="<?= e(wayfairs_url('/bills')) ?>" id="bill-payment-form">

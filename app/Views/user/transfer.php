@@ -19,7 +19,9 @@ $countries = wayfairs_countries();
 <section class="content-grid">
   <article class="card form-card bank-transfer-form">
     <div class="form-intro"><span class="page-kicker">New payment</span><h2>Beneficiary transfer</h2><p>The amount and any fee are held from your available balance until the transfer is completed or returned to you.</p></div>
-    <?php if ($fiatAccounts === []): ?>
+    <?php if (empty($bankTransfersEnabled)): ?>
+      <div class="empty-state"><div class="empty-icon"><?= wayfairs_icon('building') ?></div><h3>Bank transfers are not available yet</h3><p>Sending money to other banks is not switched on for this account. Your Wayfairs transfers below still work.</p></div>
+    <?php elseif ($fiatAccounts === []): ?>
       <div class="empty-state"><div class="empty-icon"><?= wayfairs_icon('building') ?></div><h3>No fiat transfer account</h3><p>No enabled fiat account currently accepts bank transfers.</p></div>
     <?php else: ?>
       <form class="stack" method="post" action="<?= e(wayfairs_url('/transfer')) ?>" id="bank-transfer-form">

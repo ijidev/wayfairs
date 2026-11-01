@@ -144,10 +144,11 @@ $fullName = trim((string) ($user['first_name'] ?? '') . ' ' . (string) ($user['l
       <span class="utility-copy"><strong>Pay a bill</strong><small>Send money to a utility, school, or service provider using their bank details and your bill reference.</small></span>
       <span class="transaction-arrow"><?= wayfairs_icon('arrow-right') ?></span>
     </a>
-    <div class="utility-card is-unavailable" aria-disabled="true">
+    <a class="utility-card" href="<?= e(wayfairs_url('/flights')) ?>">
       <span class="icon-wrap"><?= wayfairs_icon('globe') ?></span>
-      <span class="utility-copy"><strong>Book a flight</strong><small>Flight booking isn't available on your account yet.</small></span>
-    </div>
+      <span class="utility-copy"><strong>Book a flight</strong><small>Tell us where and when you want to travel. We confirm availability and price before anything is booked.</small></span>
+      <span class="transaction-arrow"><?= wayfairs_icon('arrow-right') ?></span>
+    </a>
   </div>
 </section>
 

@@ -39,6 +39,9 @@ function wayfairs_nav_active(string $path): bool
     if ($path === '/transactions' && str_starts_with($current, '/receipts/')) {
         return true;
     }
+    if ($path === '/utilities' && in_array($current, ['/bills', '/flights'], true)) {
+        return true;
+    }
     return $path !== '/admin' && str_starts_with($current, rtrim($path, '/') . '/');
 }
 

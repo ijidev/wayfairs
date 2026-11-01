@@ -19,6 +19,7 @@ $links = [
     ['path' => '/withdraw', 'label' => 'Withdraw', 'icon' => 'withdraw'],
     ['path' => '/transfer', 'label' => 'Transfer', 'icon' => 'transfer'],
     ['path' => '/invoices', 'label' => 'Invoices', 'icon' => 'invoice'],
+    ['path' => '/utilities', 'label' => 'Utilities', 'icon' => 'layers'],
     ['path' => '/kyc', 'label' => 'Verification', 'icon' => 'verification'],
     ['path' => '/security', 'label' => 'Security', 'icon' => 'security'],
 ];

@@ -99,7 +99,7 @@ $check('transfer form offers one banking route at a time', substr_count($transfe
 
 $database = new Database(['driver' => 'sqlite', 'path' => $directory . '/test.sqlite']);
 $applied = (new Migrator($database))->migrate();
-$check('migrations apply once', $applied === ['001_core', '002_asset_deposit_details', '003_bank_transfers_and_usd_rates', '004_bill_payments_and_open_limits']);
+$check('migrations apply once', $applied === ['001_core', '002_asset_deposit_details', '003_bank_transfers_and_usd_rates', '004_bill_payments_and_open_limits', '005_flight_requests']);
 $check('migrations are idempotent', (new Migrator($database))->migrate() === []);
 // A migration whose columns were added before its bookkeeping row was written
 // (an interrupted deploy) must finish on the next request instead of failing.
@@ -242,6 +242,31 @@ $banking->approveWithdrawal((string) $withdrawal2['id'], $adminId, true, 'Sent v
 $check('completed withdrawal debits exactly once', $ledger->accountBalance($aliceEur['id']) === $expectedAfterTransfers - 100000);
 
 // External bank transfers use the same reservation/settlement invariants.
+// Bank-detail encryption: OpenSSL AES-256-GCM is used when sodium is unavailable, and sodium records still open.
+$appKey = (string) $mockConfig->get('app_key');
+$gcmSealed = \Wayfairs\Core\Security::encrypt(['iban' => 'DE89370400440532013000'], $appKey, 'openssl');
+$check('openssl bank-detail encryption round-trips', \Wayfairs\Core\Security::decrypt($gcmSealed, $appKey)['iban'] === 'DE89370400440532013000');
+$check('openssl ciphertext hides the account number', str_starts_with($gcmSealed, 'gcm1:') && !str_contains($gcmSealed, 'DE8937'));
+$check('tampered openssl ciphertext is refused', (static function () use ($gcmSealed, $appKey): bool {
+    try {
+        \Wayfairs\Core\Security::decrypt(substr_replace($gcmSealed, $gcmSealed[30] === 'A' ? 'B' : 'A', 30, 1), $appKey);
+        return false;
+    } catch (RuntimeException) {
+        return true;
+    }
+})());
+if (\Wayfairs\Core\Security::encryptionBackend() === 'sodium') {
+    $sodiumSealed = \Wayfairs\Core\Security::encrypt(['account_number' => '0123456789'], $appKey, 'sodium');
+    $check('sodium records written earlier still open', \Wayfairs\Core\Security::decrypt($sodiumSealed, $appKey)['account_number'] === '0123456789');
+}
+$check('bank-detail encryption is available on this server', \Wayfairs\Core\Security::encryptionBackend() !== null);
+
+// Bank transfers stay off until an administrator switches them on.
+$check('bank transfers are refused while the switch is off', $expectThrows(static fn () => $banking->submitBankTransfer((string) $alice['id'], 'EUR', '1.00', ['country_code' => 'GB', 'beneficiary_name' => 'Gate Check', 'bank_name' => 'Test Bank', 'account_number' => '12345678'], 'gate-off', '', 'local'), 'not available'));
+$check('bank transfer switch is off by default', !\Wayfairs\Services\Features::enabled($database, \Wayfairs\Services\Features::BANK_TRANSFERS));
+(new \Wayfairs\Services\SiteSettings($database))->update(\Wayfairs\Services\Features::BANK_TRANSFERS, '1', $adminId, false);
+$check('administrator switch turns bank transfers on', \Wayfairs\Services\Features::enabled($database, \Wayfairs\Services\Features::BANK_TRANSFERS));
+$check('this test server has the extensions needed to enable transfers', \Wayfairs\Core\Security::missingServerExtensions() === []);
 $check('bank transfer requires beneficiary banking details', $expectThrows(static fn () => $banking->submitBankTransfer((string) $alice['id'], 'EUR', '1000.00', ['country_code' => 'NG'], 'btok-0'), 'beneficiary'));
 $check('bank transfer rejects malformed IBAN', $expectThrows(static fn () => $banking->submitBankTransfer((string) $alice['id'], 'EUR', '1000.00', ['country_code' => 'GB', 'beneficiary_name' => 'Test Beneficiary', 'bank_name' => 'Test Bank', 'iban' => 'NOT-AN-IBAN'], 'btok-invalid'), 'IBAN'));
 $bankTransfer = $banking->submitBankTransfer((string) $alice['id'], 'EUR', '1000.00', [
@@ -287,6 +312,28 @@ $database->execute('INSERT INTO usd_rates (asset_id, rate_decimal, provider, pro
 $observedRates = (new UsdRateService($database))->ratesForAssets([$eurAsset, $database->fetchOne("SELECT * FROM assets WHERE code = 'USD'")]);
 $check('cached observed fiat rate projects as current', $observedRates['EUR']['status'] === 'current' && $observedRates['EUR']['rate'] === '1.1175');
 $check('USD projects as the base currency', $observedRates['USD']['provider'] === 'base' && $observedRates['USD']['rate'] === '1');
+
+// Flight requests: validated, verified customers only, replay-safe, and status moves forward only.
+$flights = new \Wayfairs\Services\FlightService($database, new \Wayfairs\Services\Audit($database));
+$tomorrow = gmdate('Y-m-d', strtotime('+1 day'));
+$flightInput = ['origin' => 'London', 'destination' => 'Lagos', 'departure_date' => $tomorrow, 'return_date' => '', 'travellers' => '2', 'cabin' => 'economy', 'notes' => 'Window seats if possible'];
+$flightOne = $flights->create((string) $alice['id'], $flightInput, 'flight-tok-1');
+$check('flight request is recorded as requested', $flightOne['status'] === 'requested' && (int) $flightOne['travellers'] === 2 && str_starts_with((string) $flightOne['public_reference'], 'FLT'));
+$flightReplay = $flights->create((string) $alice['id'], $flightInput, 'flight-tok-1');
+$check('flight request replay returns the original record', $flightReplay['id'] === $flightOne['id'] && (int) $database->fetchOne('SELECT COUNT(*) AS n FROM flight_requests WHERE user_id = ?', [(string) $alice['id']])['n'] === 1);
+$check('flight request refuses a past departure date', $expectThrows(static fn () => $flights->create((string) $alice['id'], array_replace($flightInput, ['departure_date' => '2001-01-01']), 'flight-past'), 'past'));
+$check('flight request refuses the same origin and destination', $expectThrows(static fn () => $flights->create((string) $alice['id'], array_replace($flightInput, ['destination' => 'london']), 'flight-same'), 'different destination'));
+$check('flight request refuses zero travellers', $expectThrows(static fn () => $flights->create((string) $alice['id'], array_replace($flightInput, ['travellers' => '0']), 'flight-zero'), '1 and 9'));
+$check('flight request refuses an unknown cabin', $expectThrows(static fn () => $flights->create((string) $alice['id'], array_replace($flightInput, ['cabin' => 'steerage']), 'flight-cabin'), 'cabin'));
+$check('flight request refuses a return before departure', $expectThrows(static fn () => $flights->create((string) $alice['id'], array_replace($flightInput, ['departure_date' => gmdate('Y-m-d', strtotime('+10 days')), 'return_date' => $tomorrow]), 'flight-return'), 'return date'));
+$check('flight request refuses a missing form token', $expectThrows(static fn () => $flights->create((string) $alice['id'], $flightInput, ''), 'expired'));
+$unverifiedFlyer = $register('flight-unverified@test.local');
+$check('flight request requires verified identity', $expectThrows(static fn () => $flights->create((string) $unverifiedFlyer['id'], $flightInput, 'flight-unverified'), 'verification'));
+$check('flight request cannot jump straight to booked', $expectThrows(static fn () => $flights->decide((string) $flightOne['id'], 'booked', '', $adminId), 'cannot be changed'));
+$flights->decide((string) $flightOne['id'], 'contacted', 'Called to confirm the window seats.', $adminId);
+$flights->decide((string) $flightOne['id'], 'booked', 'Confirmed by phone.', $adminId);
+$check('flight request moves requested to contacted to booked', $database->fetchOne('SELECT status FROM flight_requests WHERE id = ?', [(string) $flightOne['id']])['status'] === 'booked');
+$check('booked flight request cannot be reopened', $expectThrows(static fn () => $flights->decide((string) $flightOne['id'], 'contacted', '', $adminId), 'cannot be changed'));
 
 // Restriction enforcement and impersonation guard.
 (new \Wayfairs\Services\Restrictions($database))->apply((string) $alice['id'], 'internal_transfer', 'manual_review', 'Test restriction for verification', $adminId, null);
