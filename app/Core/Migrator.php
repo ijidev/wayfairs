@@ -50,7 +50,7 @@ final class Migrator
                 version VARCHAR(100) CHARACTER SET ascii COLLATE ascii_bin PRIMARY KEY,
                 checksum CHAR(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
                 applied_at DATETIME(6) NOT NULL
-            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci");
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
             return;
         }
         $this->database->pdo()->exec("CREATE TABLE IF NOT EXISTS schema_migrations (

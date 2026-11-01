@@ -54,7 +54,7 @@ $basePath = (string) ($_GET['base_path'] ?? '');
           <label>Driver
             <select name="db_driver" required>
               <option value="sqlite">SQLite — local preview and testing</option>
-              <option value="mysql">MySQL 8.4+ (InnoDB) — hosting</option>
+              <option value="mysql">MySQL 8.x / MariaDB 10.4+ (InnoDB) — hosting</option>
             </select>
           </label>
           <div class="row">

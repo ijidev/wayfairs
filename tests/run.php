@@ -94,6 +94,21 @@ $generatedMysql = (string) shell_exec(escapeshellarg(PHP_BINARY) . ' ' . escapes
 $committedMysql = (string) file_get_contents(WAYFAIRS_ROOT . '/database/mysql/wayfairs-install.sql');
 $check('single MySQL install file matches the numbered migrations', $generatedMysql !== '' && $generatedMysql === $committedMysql);
 $check('migration runner ignores the consolidated install file', !in_array('wayfairs-install', array_map(static fn (string $file): string => pathinfo($file, PATHINFO_FILENAME), glob(WAYFAIRS_ROOT . '/database/mysql/[0-9][0-9][0-9]_*.sql') ?: []), true));
+
+// Hosted MySQL must stay importable on older cPanel/MariaDB servers.
+$portableSql = (string) file_get_contents(WAYFAIRS_ROOT . '/app/Core/Migrator.php');
+$fkIdColumns = [];
+foreach (glob(WAYFAIRS_ROOT . '/database/mysql/*.sql') ?: [] as $sqlFile) {
+    $contents = (string) file_get_contents($sqlFile);
+    $portableSql .= "\n" . $contents;
+    foreach (preg_split('/\R/', $contents) ?: [] as $line) {
+        if (str_contains($line, 'CHAR(36)') && !str_contains($line, 'CHARACTER SET ascii')) {
+            $fkIdColumns[] = basename($sqlFile) . ': ' . trim($line);
+        }
+    }
+}
+$check('MySQL schema avoids the MySQL-8-only 0900 collation', !str_contains($portableSql, 'utf8mb4_0900'));
+$check('MySQL CHAR(36) key columns use the ascii charset', $fkIdColumns === []);
 $database->transaction(static fn (Database $db) => $db->execute("INSERT INTO site_settings (setting_key, setting_value, is_public) VALUES ('test.immediate.commit', 'yes', 0)"), true);
 $check('immediate SQLite transaction commits', $database->fetchOne("SELECT setting_value FROM site_settings WHERE setting_key = 'test.immediate.commit'")['setting_value'] === 'yes');
 try {

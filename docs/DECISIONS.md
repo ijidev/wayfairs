@@ -8,9 +8,10 @@ controller keep the distribution self-contained.
 
 ## WDR-002 — SQLite preview, MySQL hosted target
 
-SQLite supports local installation and automated tests. MySQL 8.4+/InnoDB is the
-hosted financial source of truth. Numbered migrations are paired, and no SQLite
-test is accepted as evidence of MySQL locking/concurrency behavior.
+SQLite supports local installation and automated tests. MySQL 8.x or MariaDB
+10.4+ with InnoDB is the hosted financial source of truth. Numbered migrations
+are paired, and no SQLite test is accepted as evidence of MySQL
+locking/concurrency behavior.
 
 ## WDR-003 — Manual rails are explicit
 
@@ -112,3 +113,29 @@ Consequences worth recording, because they are not obvious:
 - The deployment guards (`root shim exists`, deny rules present, indexes off,
   `/public` canonicalisation) are asserted in `tests/run.php` because a missing
   dotfile during upload re-opens the exposure silently.
+
+## WDR-014 — Hosted schema targets MariaDB and older MySQL, not MySQL 8 only
+
+cPanel servers commonly run MariaDB, which has no `utf8mb4_0900_ai_ci`
+collation and rejects the import with `ERROR 1273 Unknown collation`. The
+hosted schema therefore declares `utf8mb4` with `utf8mb4_unicode_ci` on every
+table, which exists in MySQL 5.5+ and MariaDB 10.x. No table relies on a
+MySQL-8-only default, so an import succeeds even when the database itself was
+created with the server's `latin1` default.
+
+Two real defects were found only by executing the schema instead of trusting
+it, both pre-existing and independent of the collation:
+
+- `site_settings.updated_by` inherited `utf8mb4` while `users.id` is
+  `ascii`/`ascii_bin`, so its foreign key failed with `ERROR 1005 ... incorrectly
+  formed`. Every `CHAR(36)` key column now states its charset explicitly, and a
+  test asserts that no such column is left implicit.
+- The web installer path (`Migrator`) shared the same collation, so choosing
+  MySQL in `/install` failed exactly like the file import. It now uses the same
+  portable collation.
+
+Evidence: the generated file was imported into MariaDB 10.11 (24 tables, 6
+triggers, 3 ledger rows), the web installer completed against it, authenticated
+admin pages rendered with zero PHP warnings, and credit/replay/debit/overdraft
+adjustments produced balanced journals. MySQL 8.x was not installed here; the
+claim that it works is untested and must be reported as such.

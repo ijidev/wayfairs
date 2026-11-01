@@ -10,7 +10,7 @@ transfers, invoices/receipts, and audited admin impersonation.
 - PHP 8.2+
 - PDO SQLite for local preview or PDO MySQL for hosting
 - Sodium, OpenSSL, cURL, mbstring, intl, fileinfo
-- MySQL 8.4+ with InnoDB for hosted/production use
+- MySQL 8.x or MariaDB 10.4+ with InnoDB for hosted/production use
 - Web root pointed to `public/`
 
 No Composer or JavaScript build is required.
@@ -56,22 +56,29 @@ menu. No server-side or third-party translation widget receives page content.
 
 ## MySQL: one-file import
 
-`database/mysql/wayfairs-install.sql` is the complete MySQL 8.4+ schema
+`database/mysql/wayfairs-install.sql` is the complete MySQL/MariaDB schema
 (23 tables, append-only triggers, and the migration ledger) in one file. It is
 generated from the numbered migrations, so do not edit it by hand:
 
     php scripts/build-mysql-install.php > database/mysql/wayfairs-install.sql
 
-Upload it to an empty utf8mb4 database with the MySQL command line:
+It targets MySQL 5.7/8.x and MariaDB 10.4+ by using `utf8mb4_unicode_ci`; the
+MySQL-8-only `utf8mb4_0900_ai_ci` collation is deliberately not used, because
+older cPanel/MariaDB servers reject it with `ERROR 1273 Unknown collation`.
 
-    CREATE DATABASE wayfairs CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci;
+Create an empty database (the collation of the database itself does not matter
+because every table declares its own) and import:
+
+    CREATE DATABASE wayfairs CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
     mysql -u USER -p wayfairs < database/mysql/wayfairs-install.sql
 
 Then open `/install` to create the administrator, site settings, and currencies.
-The file contains no customer, balance, or administrator data. phpMyAdmin
-usually imports it too, but the command line is the path verified by the
-generator; it has not been executed against a live MySQL server in this
-environment.
+The file contains no customer, balance, or administrator data.
+
+Verified: the generated file imports cleanly into MariaDB 10.11 (24 tables, all
+triggers, 3 migration-ledger rows), and the web installer plus HTTP admin pages
+were exercised against it. MySQL 8.x was not available on this machine, so that
+version remains a documentation claim rather than an observed run.
 
 ## Install
 

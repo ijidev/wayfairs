@@ -1,8 +1,8 @@
--- Wayfairs MySQL 8.4+ (InnoDB) schema, generated from database/mysql/NNN_*.sql.
+-- Wayfairs MySQL/MariaDB (InnoDB) schema, generated from database/mysql/NNN_*.sql.
 -- Do not edit by hand: run `php scripts/build-mysql-install.php`.
 --
 -- Import into an EMPTY database that you have already created with utf8mb4:
---   CREATE DATABASE wayfairs CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci;
+--   CREATE DATABASE wayfairs CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 --   mysql -u USER -p wayfairs < wayfairs-install.sql
 --
 -- Then open /install (or sign in if already installed) to create the administrator,
@@ -16,7 +16,7 @@ CREATE TABLE IF NOT EXISTS schema_migrations (
     version VARCHAR(100) CHARACTER SET ascii COLLATE ascii_bin PRIMARY KEY,
     checksum CHAR(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
     applied_at DATETIME(6) NOT NULL
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ==== migration 001_core (source: 001_core.sql) ====
 SET NAMES utf8mb4;
@@ -26,10 +26,10 @@ CREATE TABLE site_settings (
   setting_key VARCHAR(100) CHARACTER SET ascii COLLATE ascii_bin PRIMARY KEY,
   setting_value TEXT NOT NULL,
   is_public TINYINT(1) NOT NULL DEFAULT 0,
-  updated_by CHAR(36) NULL,
+  updated_by CHAR(36) CHARACTER SET ascii COLLATE ascii_bin NULL,
   updated_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6) ON UPDATE CURRENT_TIMESTAMP(6),
   CHECK (is_public IN (0,1))
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE users (
   id CHAR(36) CHARACTER SET ascii COLLATE ascii_bin PRIMARY KEY,
@@ -49,7 +49,7 @@ CREATE TABLE users (
   updated_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6) ON UPDATE CURRENT_TIMESTAMP(6),
   KEY users_role_status_idx (role, status),
   KEY users_created_at_idx (created_at)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 ALTER TABLE site_settings ADD CONSTRAINT site_settings_updated_by_fk FOREIGN KEY (updated_by) REFERENCES users(id) ON DELETE SET NULL;
 
@@ -72,7 +72,7 @@ CREATE TABLE sessions (
   CONSTRAINT sessions_admin_fk FOREIGN KEY (original_admin_id) REFERENCES users(id) ON DELETE SET NULL,
   KEY sessions_user_active_idx (user_id, revoked_at, expires_at),
   KEY sessions_original_admin_idx (original_admin_id, created_at)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE password_reset_tokens (
   id CHAR(36) CHARACTER SET ascii COLLATE ascii_bin PRIMARY KEY,
@@ -82,7 +82,7 @@ CREATE TABLE password_reset_tokens (
   used_at DATETIME(6) NULL,
   created_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
   CONSTRAINT reset_user_fk FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE kyc_profiles (
   user_id CHAR(36) CHARACTER SET ascii COLLATE ascii_bin PRIMARY KEY,
@@ -106,7 +106,7 @@ CREATE TABLE kyc_profiles (
   CONSTRAINT kyc_user_fk FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
   CONSTRAINT kyc_reviewer_fk FOREIGN KEY (reviewed_by) REFERENCES users(id) ON DELETE SET NULL,
   KEY kyc_status_submitted_idx (status, submitted_at)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE capability_restrictions (
   id CHAR(36) CHARACTER SET ascii COLLATE ascii_bin PRIMARY KEY,
@@ -125,7 +125,7 @@ CREATE TABLE capability_restrictions (
   CONSTRAINT restrictions_released_by_fk FOREIGN KEY (released_by) REFERENCES users(id) ON DELETE SET NULL,
   CONSTRAINT restrictions_created_by_fk FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE RESTRICT,
   KEY restrictions_user_capability_idx (user_id, capability, released_at, expires_at)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE assets (
   id CHAR(36) CHARACTER SET ascii COLLATE ascii_bin PRIMARY KEY,
@@ -145,7 +145,7 @@ CREATE TABLE assets (
   updated_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6) ON UPDATE CURRENT_TIMESTAMP(6),
   CHECK (scale <= 18),
   CHECK (enabled IN (0,1)), CHECK (deposit_enabled IN (0,1)), CHECK (withdrawal_enabled IN (0,1))
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE ledger_accounts (
   id CHAR(36) CHARACTER SET ascii COLLATE ascii_bin PRIMARY KEY,
@@ -161,7 +161,7 @@ CREATE TABLE ledger_accounts (
   CONSTRAINT ledger_asset_fk FOREIGN KEY (asset_id) REFERENCES assets(id) ON DELETE RESTRICT,
   UNIQUE KEY ledger_asset_code_unique (asset_id, code),
   KEY ledger_accounts_owner_idx (owner_type, owner_id, asset_id)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE accounts (
   id CHAR(36) CHARACTER SET ascii COLLATE ascii_bin PRIMARY KEY,
@@ -177,7 +177,7 @@ CREATE TABLE accounts (
   CONSTRAINT accounts_ledger_fk FOREIGN KEY (ledger_account_id) REFERENCES ledger_accounts(id) ON DELETE RESTRICT,
   UNIQUE KEY accounts_user_asset_unique (user_id, asset_id),
   KEY accounts_user_status_idx (user_id, status)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE journal_entries (
   id CHAR(36) CHARACTER SET ascii COLLATE ascii_bin PRIMARY KEY,
@@ -195,7 +195,7 @@ CREATE TABLE journal_entries (
   CONSTRAINT journals_approver_fk FOREIGN KEY (approved_by) REFERENCES users(id) ON DELETE SET NULL,
   CONSTRAINT journals_related_fk FOREIGN KEY (related_entry_id) REFERENCES journal_entries(id) ON DELETE RESTRICT,
   KEY journals_type_posted_idx (entry_type, posted_at)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE postings (
   id CHAR(36) CHARACTER SET ascii COLLATE ascii_bin PRIMARY KEY,
@@ -209,7 +209,7 @@ CREATE TABLE postings (
   CHECK (amount_minor > 0),
   KEY postings_journal_idx (journal_entry_id),
   KEY postings_account_idx (ledger_account_id, created_at)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE holds (
   id CHAR(36) CHARACTER SET ascii COLLATE ascii_bin PRIMARY KEY,
@@ -225,7 +225,7 @@ CREATE TABLE holds (
   UNIQUE KEY holds_source_unique (source_type, source_id),
   KEY holds_account_status_idx (account_id, status, expires_at),
   CHECK (amount_minor > 0)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE transactions (
   id CHAR(36) CHARACTER SET ascii COLLATE ascii_bin PRIMARY KEY,
@@ -250,7 +250,7 @@ CREATE TABLE transactions (
   KEY transactions_user_created_idx (user_id, created_at),
   KEY transactions_account_created_idx (account_id, created_at),
   KEY transactions_status_created_idx (status, created_at)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE deposit_requests (
   id CHAR(36) CHARACTER SET ascii COLLATE ascii_bin PRIMARY KEY,
@@ -276,7 +276,7 @@ CREATE TABLE deposit_requests (
   CHECK (amount_minor > 0),
   KEY deposits_status_created_idx (status, created_at),
   KEY deposits_user_created_idx (user_id, created_at)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE withdrawal_requests (
   id CHAR(36) CHARACTER SET ascii COLLATE ascii_bin PRIMARY KEY,
@@ -306,7 +306,7 @@ CREATE TABLE withdrawal_requests (
   CHECK (amount_minor > 0),
   KEY withdrawals_status_created_idx (status, created_at),
   KEY withdrawals_user_created_idx (user_id, created_at)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE transfers (
   id CHAR(36) CHARACTER SET ascii COLLATE ascii_bin PRIMARY KEY,
@@ -331,7 +331,7 @@ CREATE TABLE transfers (
   CHECK (amount_minor > 0),
   KEY transfers_sender_created_idx (sender_user_id, created_at),
   KEY transfers_recipient_created_idx (recipient_user_id, created_at)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE invoices (
   id CHAR(36) CHARACTER SET ascii COLLATE ascii_bin PRIMARY KEY,
@@ -354,7 +354,7 @@ CREATE TABLE invoices (
   CONSTRAINT invoices_transfer_fk FOREIGN KEY (transfer_id) REFERENCES transfers(id) ON DELETE RESTRICT,
   CHECK (amount_minor > 0),
   KEY invoices_issuer_status_idx (issuer_user_id, status, created_at)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE beneficiaries (
   id CHAR(36) CHARACTER SET ascii COLLATE ascii_bin PRIMARY KEY,
@@ -370,7 +370,7 @@ CREATE TABLE beneficiaries (
   CONSTRAINT beneficiaries_asset_fk FOREIGN KEY (asset_id) REFERENCES assets(id) ON DELETE RESTRICT,
   CONSTRAINT beneficiaries_account_fk FOREIGN KEY (internal_account_id) REFERENCES accounts(id) ON DELETE CASCADE,
   KEY beneficiaries_user_asset_idx (user_id, asset_id)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE crypto_addresses (
   id CHAR(36) CHARACTER SET ascii COLLATE ascii_bin PRIMARY KEY,
@@ -385,7 +385,7 @@ CREATE TABLE crypto_addresses (
   CONSTRAINT addresses_admin_fk FOREIGN KEY (assigned_by) REFERENCES users(id) ON DELETE RESTRICT,
   UNIQUE KEY addresses_unique (account_id, network, address),
   CHECK (active IN (0,1))
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE notifications (
   id CHAR(36) CHARACTER SET ascii COLLATE ascii_bin PRIMARY KEY,
@@ -397,7 +397,7 @@ CREATE TABLE notifications (
   created_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
   CONSTRAINT notifications_user_fk FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
   KEY notifications_user_read_idx (user_id, read_at, created_at)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE idempotency_records (
   scope VARCHAR(100) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
@@ -407,7 +407,7 @@ CREATE TABLE idempotency_records (
   created_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
   expires_at DATETIME(6) NOT NULL,
   PRIMARY KEY(scope, idempotency_key)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE audit_events (
   id CHAR(36) CHARACTER SET ascii COLLATE ascii_bin PRIMARY KEY,
@@ -424,7 +424,7 @@ CREATE TABLE audit_events (
   CONSTRAINT audit_effective_fk FOREIGN KEY (effective_user_id) REFERENCES users(id) ON DELETE SET NULL,
   KEY audit_actor_created_idx (actor_user_id, created_at),
   KEY audit_resource_created_idx (resource_type, resource_id, created_at)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 DELIMITER $$
 CREATE TRIGGER audit_events_reject_update BEFORE UPDATE ON audit_events FOR EACH ROW BEGIN SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'audit_events is append-only'; END$$
@@ -479,10 +479,10 @@ CREATE TABLE usd_rates (
   source_updated_at DATETIME(6) NULL,
   fetched_at DATETIME(6) NOT NULL,
   CONSTRAINT usd_rates_asset_fk FOREIGN KEY (asset_id) REFERENCES assets(id) ON DELETE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ==== migration ledger (matches the application checksums) ====
 INSERT INTO schema_migrations (version, checksum, applied_at) VALUES
-    ('001_core', '5c7a0cba9623b413bca3f7e6e6ccd92280aa435b747fd9b8a68be5451e19e631', UTC_TIMESTAMP(6)),
+    ('001_core', 'b005c9d14426caf95b8834c76c94d86a01ae14210a33766935160f30e67df25e', UTC_TIMESTAMP(6)),
     ('002_asset_deposit_details', 'c6ef9903920a6d1c37bdcea664cc5bbe05415612982808ad74053d02365dd84d', UTC_TIMESTAMP(6)),
-    ('003_bank_transfers_and_usd_rates', 'c98361273b08d809a452aa5f320d7faf3f208e7a3c3e49c50202c28fb8ece0a7', UTC_TIMESTAMP(6));
+    ('003_bank_transfers_and_usd_rates', '11b64eadc10a767c764dc4447384e5914dea97fc09890f91eda62597f6b3f5a9', UTC_TIMESTAMP(6));

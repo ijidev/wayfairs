@@ -11,8 +11,8 @@
 3. Every completed value movement uses balanced immutable double-entry postings.
    Never update a balance column or use binary floating point for money.
 4. SQLite is for local preview/testing only. Hosted financial use targets MySQL
-   8.4+ with InnoDB and requires real MySQL migration, locking, concurrency,
-   backup, and restore verification.
+   8.x or MariaDB 10.4+ with InnoDB and requires real MySQL migration, locking,
+   concurrency, backup, and restore verification.
 
 ## Security
 

@@ -27,4 +27,4 @@ CREATE TABLE usd_rates (
   source_updated_at DATETIME(6) NULL,
   fetched_at DATETIME(6) NOT NULL,
   CONSTRAINT usd_rates_asset_fk FOREIGN KEY (asset_id) REFERENCES assets(id) ON DELETE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

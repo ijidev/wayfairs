@@ -73,8 +73,10 @@ application directories stay exposed. Do not use Layout B in that case.
 
 ## After either layout
 
-1. Create an empty MySQL database and import the single-file schema:
+1. Create an empty MySQL or MariaDB database and import the single-file schema:
    `mysql -u USER -p DBNAME < database/mysql/wayfairs-install.sql`.
+   The script declares `utf8mb4` and `utf8mb4_unicode_ci` on every table, so the
+   database's own default collation does not matter.
 2. Open `https://example.com/install`, choose MySQL, and leave **Base path**
    empty. The installer writes `storage/config.php` with mode 0600 where the
    filesystem allows it.
@@ -138,3 +140,6 @@ If the site was publicly reachable in that state:
 | Every route 404s but `/` works | `mod_rewrite` is disabled. |
 | URLs still contain `/public` | `base_path` is `public` in `storage/config.php`, or an old bookmark; the 301 fixes the bookmark. |
 | Login succeeds then immediately expires | Cookies are set for the wrong path; `base_path` does not match the actual URL prefix. |
+| `ERROR 1273 Unknown collation: 'utf8mb4_0900_ai_ci'` | An older cPanel/MariaDB server. The shipped schema already uses `utf8mb4_unicode_ci`; re-upload `database/mysql/wayfairs-install.sql` and `app/Core/Migrator.php`, or replace `utf8mb4_0900_ai_ci` with `utf8mb4_unicode_ci` in both. Drop and recreate the empty database, then re-import. |
+| `ERROR 1005 ... Foreign key constraint is incorrectly formed` | Pre-fix schema, where `site_settings.updated_by` was `utf8mb4` while `users.id` is `ascii`. Re-upload the current migration files and re-import into a fresh database. |
+| Import stops part-way through a migration | `DELIMITER` is a client directive. Use the `mysql`/`mariadb` command line or let `/install` run the migrations; a panel importer may not understand `DELIMITER`, and the web installer does. |

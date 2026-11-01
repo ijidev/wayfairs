@@ -3,7 +3,7 @@
 declare(strict_types=1);
 
 /**
- * Builds one importable MySQL 8.4+ schema file from the numbered migrations.
+ * Builds one importable MySQL/MariaDB schema file from the numbered migrations.
  *
  * The output contains the migration-ledger table, every numbered MySQL migration
  * in order, and ledger rows whose checksums match the source files. The installer
@@ -22,11 +22,11 @@ if ($files === []) {
 }
 
 $out = [];
-$out[] = '-- Wayfairs MySQL 8.4+ (InnoDB) schema, generated from database/mysql/NNN_*.sql.';
+$out[] = '-- Wayfairs MySQL/MariaDB (InnoDB) schema, generated from database/mysql/NNN_*.sql.';
 $out[] = '-- Do not edit by hand: run `php scripts/build-mysql-install.php`.';
 $out[] = '--';
 $out[] = '-- Import into an EMPTY database that you have already created with utf8mb4:';
-$out[] = '--   CREATE DATABASE wayfairs CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci;';
+$out[] = '--   CREATE DATABASE wayfairs CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;';
 $out[] = '--   mysql -u USER -p wayfairs < wayfairs-install.sql';
 $out[] = '--';
 $out[] = '-- Then open /install (or sign in if already installed) to create the administrator,';
@@ -40,7 +40,7 @@ $out[] = 'CREATE TABLE IF NOT EXISTS schema_migrations (';
 $out[] = '    version VARCHAR(100) CHARACTER SET ascii COLLATE ascii_bin PRIMARY KEY,';
 $out[] = '    checksum CHAR(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,';
 $out[] = '    applied_at DATETIME(6) NOT NULL';
-$out[] = ') ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;';
+$out[] = ') ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;';
 $out[] = '';
 
 $ledger = [];
