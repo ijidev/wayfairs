@@ -16,7 +16,7 @@ $footerMode = 'guest';
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <meta name="theme-color" content="<?= e($site['site.primary_color'] ?? '#0f8b6d') ?>" />
-  <meta name="description" content="<?= e($site['site.tagline'] ?? 'Modern banking for people and businesses') ?>" />
+  <meta name="description" content="<?= e($site['site.tagline'] ?? 'Your money. Multiple currencies. One place.') ?>" />
   <title><?= e($name) ?><?= $isHome ? '' : ' · Secure banking' ?></title>
   <style><?= $css ?></style>
   <style>:root{--brand:<?= e($site['site.primary_color'] ?? '#0f8b6d') ?>;--accent:<?= e($site['site.accent_color'] ?? '#f0b429') ?>}</style>
@@ -30,8 +30,9 @@ $footerMode = 'guest';
         <span class="brand-copy"><strong><?= e($name) ?></strong><small>Everyday banking, made clear</small></span>
       </a>
       <nav class="guest-nav" aria-label="Main navigation">
-        <a href="<?= e(wayfairs_url('/#features')) ?>">Features</a>
-        <a href="<?= e(wayfairs_url('/#how-it-works')) ?>">How it works</a>
+        <a href="<?= e(wayfairs_url('/#features')) ?>">Multi-currency</a>
+        <a href="<?= e(wayfairs_url('/#payments')) ?>">Payments</a>
+        <a href="<?= e(wayfairs_url('/#business')) ?>">Business</a>
         <a href="<?= e(wayfairs_url('/#security')) ?>">Security</a>
         <a href="<?= e(wayfairs_url('/login')) ?>">Sign in</a>
         <?php require WAYFAIRS_ROOT . '/app/Views/partials/translator.php'; ?>
@@ -40,8 +41,9 @@ $footerMode = 'guest';
       <details class="guest-mobile-menu">
         <summary aria-label="Open navigation"><?= wayfairs_icon('menu') ?><span>Menu</span></summary>
         <nav aria-label="Mobile navigation">
-          <a href="<?= e(wayfairs_url('/#features')) ?>">Features</a>
-          <a href="<?= e(wayfairs_url('/#how-it-works')) ?>">How it works</a>
+          <a href="<?= e(wayfairs_url('/#features')) ?>">Multi-currency</a>
+          <a href="<?= e(wayfairs_url('/#payments')) ?>">Payments</a>
+          <a href="<?= e(wayfairs_url('/#business')) ?>">Business</a>
           <a href="<?= e(wayfairs_url('/#security')) ?>">Security</a>
           <a href="<?= e(wayfairs_url('/login')) ?>">Sign in</a>
           <?php require WAYFAIRS_ROOT . '/app/Views/partials/translator.php'; ?>

@@ -139,3 +139,44 @@ triggers, 3 ledger rows), the web installer completed against it, authenticated
 admin pages rendered with zero PHP warnings, and credit/replay/debit/overdraft
 adjustments produced balanced journals. MySQL 8.x was not installed here; the
 claim that it works is untested and must be reported as such.
+
+## WDR-015 — A bank transfer asks for one banking route at a time
+
+A beneficiary account is addressed either by IBAN or by a local account number,
+never both. Showing IBAN, SWIFT, account number, and routing code together left
+customers guessing which fields applied and risked submitting a stale IBAN after
+switching intent.
+
+The form now presents two selectable routes — **International (IBAN)** and
+**Local account number** — and renders only the matching field group. The
+inactive group is hidden, its inputs are disabled and cleared, and `required` is
+applied only to the active route (IBAN, or account number). The selector is a
+plain radio group, so it works without JavaScript; with scripting disabled both
+groups are shown with a note to fill in whichever applies. Bank name, bank
+address, beneficiary details, amount, and remark stay common to both routes.
+
+No server change was needed: `BankingService::submitBankTransfer` already
+accepts an IBAN **or** an account number and treats SWIFT/BIC and the routing
+code as optional. Verified over HTTP by submitting a funded transfer through
+each route; both reserved funds and both history rows redacted the destination
+to last four characters.
+
+## WDR-016 — The public homepage sells the product, the product shows the mechanics
+
+The public homepage is marketing surface. It leads with "Your money. Multiple
+currencies. One place." and covers multi-currency balances, receiving and
+sending payments, personal and business use, invoices, security and trust, and a
+final call to action. It deliberately excludes manual-settlement narration,
+double-entry ledger description, Sodium encryption internals, impersonation
+procedure, internal audit mechanisms, and any statistics that are not real.
+
+Honesty is not removed, it is relocated: settlement state, hold behaviour, and
+redacted destinations appear on the pages where money actually moves
+(deposits, withdrawals, transfers, and their history tables). No provider,
+integration, statistic, or testimonial is invented, and the homepage lists only
+the asset codes the installation has enabled.
+
+The installer's default tagline and footer changed to the same positioning; the
+footer partial also replaces the previously seeded "secure manual settlement
+preview" line on older installations. An administrator can still override either
+value in Settings.

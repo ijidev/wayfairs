@@ -65,7 +65,7 @@ final class Installer
     {
         $settings = [
             ['site.name', 'Wayfairs', 1],
-            ['site.tagline', 'Modern banking for people and businesses', 1],
+            ['site.tagline', 'Your money. Multiple currencies. One place.', 1],
             ['site.support_email', trim((string) ($input['support_email'] ?? '')), 1],
             ['site.support_phone', trim((string) ($input['support_phone'] ?? '')), 1],
             ['site.address', trim((string) ($input['address'] ?? '')), 1],
@@ -75,7 +75,7 @@ final class Installer
             ['site.deposit_instructions_crypto', 'Send only to the assigned address and network. Deposits are reviewed after the required confirmation policy.', 1],
             ['site.withdrawal_notice', 'Withdrawals are processed after administrative review and external settlement. Keep your destination details current.', 1],
             ['site.kyc_notice', 'Identity verification is required before deposits, withdrawals, and transfers above configured limits.', 1],
-            ['site.footer', 'Wayfairs · Secure manual settlement preview. No provider is connected until configured and verified.', 1],
+            ['site.footer', 'Multi-currency accounts, international payments, and invoices in one place.', 1],
         ];
         foreach ($settings as [$key, $value, $public]) {
             $database->execute('INSERT INTO site_settings (setting_key, setting_value, is_public, updated_by) VALUES (?, ?, ?, NULL)', [$key, $value, $public]);

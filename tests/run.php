@@ -86,6 +86,17 @@ $allDenied = $denyFiles !== [] && array_filter($denyFiles, static fn (string $ru
 $check('every internal directory ships a deny rule', $allDenied && count($denyFiles) === 7);
 $check('public .htaccess canonicalises /public URLs', str_contains($publicHtaccess, 'THE_REQUEST') && str_contains($publicHtaccess, 'public'));
 
+// Public marketing copy must sell the product, not expose its internals.
+$homeView = (string) file_get_contents($projectRoot . '/app/Views/home.php');
+$check('homepage leads with the multi-currency positioning', str_contains($homeView, 'Your money. Multiple currencies. One place.'));
+$implementationTerms = ['manual settlement', 'double-entry', 'sodium', 'impersonat'];
+$leakedTerms = array_filter($implementationTerms, static fn (string $term): bool => stripos($homeView, $term) !== false);
+$check('homepage omits implementation-only language', $leakedTerms === []);
+
+// A beneficiary bank is addressed either by IBAN or by local account number.
+$transferView = (string) file_get_contents($projectRoot . '/app/Views/user/transfer.php');
+$check('transfer form offers one banking route at a time', substr_count($transferView, 'data-route-group=') === 2 && str_contains($transferView, 'name="transfer_route"') && str_contains($transferView, '<noscript>'));
+
 $database = new Database(['driver' => 'sqlite', 'path' => $directory . '/test.sqlite']);
 $applied = (new Migrator($database))->migrate();
 $check('migrations apply once', $applied === ['001_core', '002_asset_deposit_details', '003_bank_transfers_and_usd_rates']);

@@ -50,15 +50,37 @@ $countries = wayfairs_countries();
           <label class="wide">Beneficiary address <span class="field-hint">Optional</span><input name="beneficiary_address" maxlength="300" autocomplete="street-address" placeholder="Street, city, postal code" <?= $verified ? '' : 'disabled' ?> /></label>
         </div>
 
-        <div class="form-section-title"><span>3</span><div><strong>Receiving bank</strong><small>Provide an IBAN or local account number.</small></div></div>
+        <div class="form-section-title"><span>3</span><div><strong>Receiving bank</strong><small>Choose how the beneficiary's account is addressed, then enter only the details that apply.</small></div></div>
+        <fieldset class="route-selector">
+          <legend class="sr-only">Transfer option</legend>
+          <label class="route-option">
+            <input type="radio" name="transfer_route" value="iban" <?= $verified ? '' : 'disabled' ?> checked />
+            <span class="route-body">
+              <span class="route-icon"><?= wayfairs_icon('globe') ?></span>
+              <span class="route-copy"><strong>International (IBAN)</strong><small>Use the beneficiary's IBAN, with a SWIFT/BIC where the payment crosses borders.</small></span>
+            </span>
+          </label>
+          <label class="route-option">
+            <input type="radio" name="transfer_route" value="local" <?= $verified ? '' : 'disabled' ?> />
+            <span class="route-body">
+              <span class="route-icon"><?= wayfairs_icon('building') ?></span>
+              <span class="route-copy"><strong>Local account number</strong><small>Use a domestic account number, with a routing, sort, or transit code where required.</small></span>
+            </span>
+          </label>
+        </fieldset>
         <div class="form-grid">
           <label>Bank name<input name="bank_name" maxlength="160" autocomplete="organization" required <?= $verified ? '' : 'disabled' ?> /></label>
-          <label>SWIFT / BIC <span class="field-hint">Optional</span><input class="uppercase-input" name="swift_bic" maxlength="11" placeholder="AAAABBCCDDD" <?= $verified ? '' : 'disabled' ?> /></label>
-          <label>IBAN<input class="uppercase-input" name="iban" maxlength="34" placeholder="International account number" <?= $verified ? '' : 'disabled' ?> /></label>
-          <label>Local account number<input name="account_number" maxlength="40" placeholder="Use when IBAN is not applicable" <?= $verified ? '' : 'disabled' ?> /></label>
-          <label>Routing / sort / transit code <span class="field-hint">Optional</span><input name="routing_code" maxlength="40" <?= $verified ? '' : 'disabled' ?> /></label>
           <label>Bank address <span class="field-hint">Optional</span><input name="bank_address" maxlength="300" <?= $verified ? '' : 'disabled' ?> /></label>
         </div>
+        <div class="form-grid route-fields" data-route-group="iban">
+          <label>IBAN<input class="uppercase-input" name="iban" maxlength="34" placeholder="e.g. GB33BUKB20201555555555" autocomplete="off" <?= $verified ? '' : 'disabled' ?> /></label>
+          <label>SWIFT / BIC <span class="field-hint">Optional for some countries</span><input class="uppercase-input" name="swift_bic" maxlength="11" placeholder="AAAABBCCDDD" autocomplete="off" <?= $verified ? '' : 'disabled' ?> /></label>
+        </div>
+        <div class="form-grid route-fields" data-route-group="local" hidden>
+          <label>Account number<input name="account_number" maxlength="40" inputmode="numeric" autocomplete="off" <?= $verified ? '' : 'disabled' ?> /></label>
+          <label>Routing / sort / transit code <span class="field-hint">Optional</span><input name="routing_code" maxlength="40" autocomplete="off" <?= $verified ? '' : 'disabled' ?> /></label>
+        </div>
+        <noscript><style>[data-route-group]{display:grid!important}</style><p class="field-hint route-noscript-note">JavaScript is turned off, so both the IBAN and local account number fields are shown. Fill in the one your beneficiary's bank uses and leave the other empty.</p></noscript>
         <label>Remark <span class="field-hint">Optional</span><input name="remark" maxlength="500" placeholder="Payment purpose or note for operations" <?= $verified ? '' : 'disabled' ?> /></label>
         <div class="receipt-footnote"><?= wayfairs_icon('security') ?><span>Full bank details are encrypted at rest. Browser and queue views expose only safe labels and last-four summaries.</span></div>
         <div class="form-actions"><button class="btn full" type="submit" <?= $verified ? '' : 'disabled' ?>><?= $verified ? 'Submit bank transfer' : 'Verification required' ?> <?= wayfairs_icon('arrow-right', 'btn-icon') ?></button></div>
@@ -70,7 +92,7 @@ $countries = wayfairs_countries();
     <article class="card static transfer-status-card">
       <div class="panel-head"><div><h2>Settlement flow</h2><p>Traditional transfer controls with honest manual settlement.</p></div></div>
       <div class="process-steps">
-        <div class="process-step"><div><strong>Validate beneficiary details</strong><p>Country, legal name, bank, and IBAN or account number are required.</p></div></div>
+        <div class="process-step"><div><strong>Validate beneficiary details</strong><p>Country, legal name, bank, and the IBAN or local account number you selected are required.</p></div></div>
         <div class="process-step"><div><strong>Reserve funds</strong><p>The transfer amount and configured fee leave the available balance.</p></div></div>
         <div class="process-step"><div><strong>Operations settles externally</strong><p>An administrator records sent or rejected; no bank-provider state is simulated.</p></div></div>
         <div class="process-step"><div><strong>Ledger finalizes</strong><p>Sent captures the hold. Rejected releases it in full.</p></div></div>
@@ -99,6 +121,36 @@ $countries = wayfairs_countries();
   if (!select) return;
   function sync() { var option = select.options[select.selectedIndex]; if (!option) return; if (available) available.textContent = option.getAttribute('data-available') || '—'; if (usd) usd.textContent = option.getAttribute('data-usd') || '—'; if (fee) fee.textContent = option.getAttribute('data-fee') || '—'; }
   select.addEventListener('change', sync); sync();
+})();
+
+(function () {
+  var form = document.getElementById('bank-transfer-form');
+  if (!form) return;
+  var verified = <?= $verified ? 'true' : 'false' ?>;
+  var routes = form.querySelectorAll('input[name="transfer_route"]');
+  var groups = form.querySelectorAll('[data-route-group]');
+  function selectedRoute() {
+    var route = 'iban';
+    routes.forEach(function (radio) { if (radio.checked) route = radio.value; });
+    return route;
+  }
+  function isRequired(route, name) {
+    return route === 'iban' ? name === 'iban' : name === 'account_number';
+  }
+  function syncRoute() {
+    var route = selectedRoute();
+    groups.forEach(function (group) {
+      var active = group.getAttribute('data-route-group') === route;
+      group.hidden = !active;
+      group.querySelectorAll('input').forEach(function (input) {
+        input.disabled = !active || !verified;
+        input.required = active && verified && isRequired(route, input.name);
+        if (!active) input.value = '';
+      });
+    });
+  }
+  routes.forEach(function (radio) { radio.addEventListener('change', syncRoute); });
+  syncRoute();
 })();
 </script>
 
