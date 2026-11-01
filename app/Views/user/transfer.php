@@ -49,15 +49,7 @@ $beneficiaries = $beneficiaries ?? [];
           <div class="summary-line"><small>Transfer fee</small><strong id="transfer-fee"><?= e($firstAsset ? wayfairs_amount((int) $firstAsset['withdrawal_fee_minor'], (int) $firstAsset['scale'], (string) $firstAsset['symbol'], (string) $firstAsset['code']) : '—') ?></strong></div>
         </div>
 
-        <div class="form-section-title"><span>2</span><div><strong>Beneficiary</strong><small>Enter the legal recipient details held by their bank.</small></div></div>
-        <div class="form-grid">
-          <label>Beneficiary country<select name="country_code" id="transfer-country" required <?= $disabled ?>><option value="">Select country or territory</option><?php foreach ($countries as $code => $country): ?><option value="<?= e($code) ?>" <?= $oldValue('country_code') === $code ? 'selected' : '' ?>><?= e($country) ?></option><?php endforeach; ?></select></label>
-          <label>Account holder name<input name="beneficiary_name" id="transfer-beneficiary-name" maxlength="160" autocomplete="name" placeholder="Full legal name" value="<?= e($oldValue('beneficiary_name')) ?>" required <?= $disabled ?> /></label>
-          <label class="wide">Beneficiary address <span class="field-hint">Optional</span><input name="beneficiary_address" id="transfer-beneficiary-address" maxlength="300" autocomplete="street-address" placeholder="Street, city, postal code" value="<?= e($oldValue('beneficiary_address')) ?>" <?= $disabled ?> /></label>
-        </div>
-        <p class="notice brand" id="beneficiary-match" role="status" hidden></p>
-
-        <div class="form-section-title"><span>3</span><div><strong>Receiving bank</strong><small>Choose how the beneficiary's account is addressed, then enter only the details that apply.</small></div></div>
+        <div class="form-section-title"><span>2</span><div><strong>Beneficiary account</strong><small>Choose how the account is addressed. Typing a saved account number fills in the rest.</small></div></div>
         <fieldset class="route-selector">
           <legend class="sr-only">Transfer option</legend>
           <label class="route-option">
@@ -87,6 +79,14 @@ $beneficiaries = $beneficiaries ?? [];
           <label>Account number<input name="account_number" id="transfer-account" maxlength="40" inputmode="numeric" autocomplete="off" value="<?= e($oldValue('account_number')) ?>" <?= $disabled ?> /></label>
           <label>Routing / sort / transit code <span class="field-hint">Optional</span><input name="routing_code" id="transfer-routing" maxlength="40" autocomplete="off" value="<?= e($oldValue('routing_code')) ?>" <?= $disabled ?> /></label>
         </div>
+        <div class="form-section-title"><span>3</span><div><strong>Beneficiary</strong><small>Enter the legal recipient details held by their bank.</small></div></div>
+        <div class="form-grid">
+          <label>Beneficiary country<select name="country_code" id="transfer-country" required <?= $disabled ?>><option value="">Select country or territory</option><?php foreach ($countries as $code => $country): ?><option value="<?= e($code) ?>" <?= $oldValue('country_code') === $code ? 'selected' : '' ?>><?= e($country) ?></option><?php endforeach; ?></select></label>
+          <label>Account holder name<input name="beneficiary_name" id="transfer-beneficiary-name" maxlength="160" autocomplete="name" placeholder="Full legal name" value="<?= e($oldValue('beneficiary_name')) ?>" required <?= $disabled ?> /></label>
+          <label class="wide">Beneficiary address <span class="field-hint">Optional</span><input name="beneficiary_address" id="transfer-beneficiary-address" maxlength="300" autocomplete="street-address" placeholder="Street, city, postal code" value="<?= e($oldValue('beneficiary_address')) ?>" <?= $disabled ?> /></label>
+        </div>
+        <p class="notice brand" id="beneficiary-match" role="status" hidden></p>
+
         <noscript><style>[data-route-group]{display:grid!important}</style><p class="field-hint route-noscript-note">JavaScript is turned off, so both the IBAN and local account number fields are shown. Fill in the one your beneficiary's bank uses and leave the other empty.</p></noscript>
 
         <div class="form-section-title"><span>4</span><div><strong>Remember this beneficiary</strong><small>Optional. Saved beneficiaries fill in automatically next time you enter their account number.</small></div></div>

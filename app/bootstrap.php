@@ -24,7 +24,7 @@ ini_set('default_charset', 'UTF-8');
 
 set_exception_handler(static function (Throwable $error): void {
     $requestId = $_SERVER['WAYFAIRS_REQUEST_ID'] ?? bin2hex(random_bytes(8));
-    error_log(sprintf('[wayfairs] request=%s error=%s', $requestId, $error->getMessage()));
+    error_log(sprintf('[wayfairs] request=%s %s: %s in %s:%d', $requestId, $error::class, $error->getMessage(), $error->getFile(), $error->getLine()));
     if (!headers_sent()) {
         http_response_code(500);
         header('Content-Type: text/html; charset=UTF-8');

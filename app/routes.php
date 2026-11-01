@@ -17,6 +17,9 @@ use Wayfairs\Services\AuthService;
 use Wayfairs\Services\BankingService;
 use Wayfairs\Services\BeneficiaryService;
 use Wayfairs\Services\Features;
+use Wayfairs\Services\EmailTemplates;
+use Wayfairs\Services\Mailer;
+use Wayfairs\Services\OtpService;
 use Wayfairs\Services\FlightService;
 use Wayfairs\Services\KycService;
 use Wayfairs\Services\LedgerService;
@@ -34,6 +37,9 @@ return function (Router $router, Database $database): void {
     $audit = new Audit($database);
     $flights = new FlightService($database, $audit);
     $beneficiaries = new BeneficiaryService($database, $banking, $audit);
+    $mailer = new Mailer($database);
+    $emailTemplates = new EmailTemplates($database);
+    $otp = new OtpService($database, $mailer, $emailTemplates);
     $rates = new UsdRateService($database);
 
     $page = static fn (string $view, array $data = []) => View::render($view, $data, 'layouts/app');
@@ -96,9 +102,13 @@ return function (Router $router, Database $database): void {
 
     $router->get('/register', static fn () => $guest('auth/register'), 'guest');
 
-    $router->post('/register', static function (Request $request) use ($auth): never {
+    $router->post('/register', static function (Request $request) use ($auth, $mailer, $emailTemplates): never {
         try {
             $user = $auth->register($request->allPost());
+            $rendered = $emailTemplates->render('registration', ['first_name' => (string) ($user['first_name'] ?? ''), 'site_url' => wayfairs_url('/')]);
+            if ($rendered !== null && $mailer->isConfigured()) {
+                $mailer->send((string) $user['email'], $rendered['subject'], $rendered['body']);
+            }
             wayfairs_set_session_cookie($auth->createSession((string) $user['id']), 720 * 60);
             Flash::put('success', 'Your account is ready. Complete identity verification to start moving money.');
             Response::redirect('/kyc');
@@ -289,13 +299,19 @@ return function (Router $router, Database $database): void {
         $page('user/review', ['kind' => $kind, 'preview' => $preview, 'input' => $input, 'countries' => wayfairs_countries()]);
     };
 
-    $confirmMovement = static function (string $kind) use ($banking, $attempt, $movementDestination, $beneficiaries): never {
+    $confirmMovement = static function (string $kind) use ($banking, $attempt, $movementDestination, $beneficiaries, $otp): never {
         $user = Context::user() ?? [];
         $back = $kind === 'bill' ? '/bills' : '/transfer';
         $input = Draft::take('review.' . $kind);
         if ($input === null) {
             Flash::put('error', 'This review has expired. Enter the details again.');
             Response::redirect($back);
+        }
+        $otpEnabled = $otp->isEnabled();
+        if ($otpEnabled) {
+            $otpId = $otp->issue((string) $user['id'], $kind === 'bill' ? 'bill_payment' : 'bank_transfer', (string) ($_SERVER['REMOTE_ADDR'] ?? ''));
+            Draft::put('otp.' . $kind, ['id' => $otpId, 'input' => $input]);
+            Response::redirect($kind === 'bill' ? '/bills/otp' : '/transfer/otp');
         }
         $attempt(static function () use ($banking, $movementDestination, $beneficiaries, $user, $kind, $input): void {
             [$destination, $remark] = $movementDestination($input, $kind);
@@ -305,6 +321,7 @@ return function (Router $router, Database $database): void {
                 $beneficiaries->saveFromTransfer((string) $user['id'], $destination, $route, $input['nickname']);
             }
             Draft::forget('form.' . $kind);
+            Draft::forget('review.' . $kind);
         }, $kind === 'bill' ? 'Bill payment submitted. Funds are held while it is processed.' : 'Bank transfer submitted. Funds are held while it is processed.', $back);
     };
 
@@ -314,6 +331,41 @@ return function (Router $router, Database $database): void {
     $router->post('/bills/review', static fn (Request $request) => $reviewMovement($request, 'bill'), 'auth', true);
     $router->post('/transfer/confirm', static fn () => $confirmMovement('transfer'), 'auth', true);
     $router->post('/bills/confirm', static fn () => $confirmMovement('bill'), 'auth', true);
+
+    $verifyOtp = static function (string $kind) use ($otp, $banking, $movementDestination, $beneficiaries, $attempt): never {
+        $user = Context::user() ?? [];
+        $back = $kind === 'bill' ? '/bills' : '/transfer';
+        $otpEntry = Draft::get('otp.' . $kind);
+        if (!is_array($otpEntry) || !isset($otpEntry['input'])) {
+            Flash::put('error', 'This verification has expired. Start again.');
+            Response::redirect($back);
+        }
+        $input = $otpEntry['input'];
+        $code = trim((string) ($_POST['code'] ?? ''));
+        if (!$otp->verify((string) $user['id'], $kind === 'bill' ? 'bill_payment' : 'bank_transfer', $code)) {
+            Flash::put('error', 'That code is incorrect or has expired. Try again.');
+            Response::redirect($kind === 'bill' ? '/bills/otp' : '/transfer/otp');
+        }
+        $attempt(static function () use ($banking, $movementDestination, $beneficiaries, $user, $kind, $input): void {
+            [$destination, $remark] = $movementDestination($input, $kind);
+            $route = $input['transfer_route'] === 'local' ? 'local' : 'iban';
+            $banking->submitBankTransfer((string) $user['id'], $input['asset_code'] ?: 'USD', $input['amount'], $destination, (string) $input['idem'], $remark, $route, $kind === 'bill' ? 'bill' : 'transfer');
+            if ($kind === 'transfer' && $input['save_beneficiary'] === '1') {
+                $beneficiaries->saveFromTransfer((string) $user['id'], $destination, $route, $input['nickname']);
+            }
+            Draft::forget('form.' . $kind);
+            Draft::forget('review.' . $kind);
+            Draft::forget('otp.' . $kind);
+        }, $kind === 'bill' ? 'Bill payment submitted. Funds are held while it is processed.' : 'Bank transfer submitted. Funds are held while it is processed.', $back);
+    };
+    $router->get('/transfer/otp', static function () use ($page): void {
+        $page('user/otp', ['kind' => 'transfer']);
+    }, 'auth');
+    $router->get('/bills/otp', static function () use ($page): void {
+        $page('user/otp', ['kind' => 'bill']);
+    }, 'auth');
+    $router->post('/transfer/otp', static fn () => $verifyOtp('transfer'), 'auth', true);
+    $router->post('/bills/otp', static fn () => $verifyOtp('bill'), 'auth', true);
 
     $router->get('/transfer/beneficiary', static function (Request $request) use ($beneficiaries): never {
         $user = Context::user() ?? [];
@@ -722,6 +774,86 @@ return function (Router $router, Database $database): void {
     $router->post('/admin/flights/{id}/status', static function (Request $request) use ($flights, $attempt): never {
         $id = (string) $request->route('id');
         $attempt(static fn () => $flights->decide($id, (string) $request->post('status', ''), (string) $request->post('admin_note', ''), (string) Context::user()['id']), 'Flight request updated.', '/admin/flights');
+    }, 'admin', true);
+
+    $router->get('/admin/otp', static function () use ($admin, $database, $otp): void {
+        $admin('admin/otp', ['enabled' => $otp->isEnabled()]);
+    }, 'admin');
+
+    $router->post('/admin/otp', static function (Request $request) use ($otp, $audit, $attempt): never {
+        $attempt(static function () use ($otp, $audit, $request): void {
+            $enable = (string) $request->post('enabled', '0') === '1';
+            $settings->update('feature.otp', $enable ? '1' : '0', (string) Context::user()['id'], false);
+            $audit->record($enable ? 'feature.otp.enabled' : 'feature.otp.disabled', 'site_setting', 'feature.otp', null, []);
+        }, 'Verification code setting saved.', '/admin/otp');
+    }, 'admin', true);
+
+    $router->get('/admin/smtp', static function () use ($admin, $database, $mailer): void {
+        $settings = new SiteSettings($database);
+        $values = [];
+        foreach (['smtp.host', 'smtp.port', 'smtp.username', 'smtp.encryption', 'smtp.from_email', 'smtp.from_name'] as $key) {
+            $values[$key] = $settings->get($key, '');
+        }
+        $admin('admin/smtp', ['values' => $values, 'mailer' => $mailer]);
+    }, 'admin');
+
+    $router->post('/admin/smtp', static function (Request $request) use ($settings, $mailer, $audit, $attempt): never {
+        $attempt(static function () use ($settings, $mailer, $audit, $request): void {
+            $keys = ['smtp.host', 'smtp.port', 'smtp.username', 'smtp.password', 'smtp.encryption', 'smtp.from_email', 'smtp.from_name'];
+            $values = [];
+            foreach ($keys as $key) {
+                $postKey = str_replace('.', '_', $key);
+                $value = trim((string) $request->post($postKey, ''));
+                if ($key === 'smtp.port') {
+                    $value = (string) max(1, min(65535, (int) $value));
+                }
+                if ($key === 'smtp.encryption' && !in_array($value, ['none', 'tls', 'ssl'], true)) {
+                    $value = 'tls';
+                }
+                if ($key === 'smtp.from_email' && $value !== '' && !filter_var($value, FILTER_VALIDATE_EMAIL)) {
+                    throw new RuntimeException('Enter a valid from email address.');
+                }
+                if ($key === 'smtp.password' && $value !== '' && !str_starts_with($value, 'enc:')) {
+                    $value = 'enc:' . \Wayfairs\Core\Security::encrypt(['v' => $value], (string) \Wayfairs\Core\Config::instance()->get('app_key', ''));
+                }
+                $values[$key] = $value;
+            }
+            // Preserve an existing password when the field is left blank.
+            if (trim((string) $request->post('smtp_password', '')) === '') {
+                unset($values['smtp.password']);
+            }
+            foreach ($values as $key => $value) {
+                $settings->update($key, (string) $value, (string) Context::user()['id'], false);
+            }
+            $audit->record('smtp.updated', 'site_setting', null, 'Administrator updated SMTP settings', ['keys' => array_keys($values)]);
+        }, 'SMTP settings saved.', '/admin/smtp');
+    }, 'admin', true);
+
+    $router->post('/admin/smtp/test', static function (Request $request) use ($mailer, $attempt): never {
+        $to = trim((string) $request->post('test_email', ''));
+        if (!filter_var($to, FILTER_VALIDATE_EMAIL)) {
+            Flash::put('error', 'Enter a valid email address to test.');
+            Response::redirect('/admin/smtp');
+        }
+        $result = $mailer->test($to);
+        if ($result['ok']) {
+            Flash::put('success', 'Test email sent to ' . $to . '.');
+        } else {
+            Flash::put('error', 'Test email failed: ' . ($result['error'] ?? 'unknown error'));
+        }
+        Response::redirect('/admin/smtp');
+    }, 'admin', true);
+
+    $router->get('/admin/email-templates', static function () use ($admin, $emailTemplates): void {
+        $admin('admin/email-templates', ['templates' => $emailTemplates->all()]);
+    }, 'admin');
+
+    $router->post('/admin/email-templates/{key}', static function (Request $request) use ($emailTemplates, $audit, $attempt): never {
+        $key = (string) $request->route('key');
+        $attempt(static function () use ($emailTemplates, $audit, $request, $key): void {
+            $emailTemplates->update($key, (string) $request->post('subject', ''), (string) $request->post('body', ''), (string) Context::user()['id']);
+            $audit->record('email_template.updated', 'email_template', $key, null, []);
+        }, 'Email template saved.', '/admin/email-templates');
     }, 'admin', true);
 
     $router->get('/admin/settings', static function () use ($admin, $database): void {

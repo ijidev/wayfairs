@@ -549,6 +549,44 @@ CREATE TABLE saved_beneficiaries (
   KEY saved_beneficiaries_owner_idx (owner_key, status)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+-- ==== migration 007_otp_and_email (source: 007_otp_and_email.sql) ====
+-- One-time codes used to confirm sensitive actions (transfers, payments).
+CREATE TABLE otp_codes (
+  id CHAR(36) CHARACTER SET ascii COLLATE ascii_bin PRIMARY KEY,
+  user_id CHAR(36) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+  purpose VARCHAR(40) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+  code_hash CHAR(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+  expires_at DATETIME(6) NOT NULL,
+  consumed_at DATETIME(6) NULL,
+  attempts TINYINT UNSIGNED NOT NULL DEFAULT 0,
+  created_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+  ip VARCHAR(45) CHARACTER SET ascii COLLATE ascii_bin NULL,
+  CONSTRAINT otp_codes_user_fk FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE RESTRICT,
+  KEY otp_codes_user_idx (user_id, purpose, created_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Editable email templates. Placeholders such as {first_name} are filled at send time.
+CREATE TABLE email_templates (
+  id CHAR(36) CHARACTER SET ascii COLLATE ascii_bin PRIMARY KEY,
+  template_key VARCHAR(40) CHARACTER SET ascii COLLATE ascii_bin NOT NULL UNIQUE,
+  subject VARCHAR(200) NOT NULL,
+  body TEXT NOT NULL,
+  updated_by CHAR(36) CHARACTER SET ascii COLLATE ascii_bin NULL,
+  updated_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6) ON UPDATE CURRENT_TIMESTAMP(6),
+  CONSTRAINT email_templates_updated_by_fk FOREIGN KEY (updated_by) REFERENCES users(id) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+INSERT INTO email_templates (id, template_key, subject, body) VALUES
+(UUID(), 'otp', 'Your Wayfairs verification code', 'Hello {first_name},\n\nYour verification code is {code}. It expires in {minutes} minutes. If you did not request it, ignore this message.'),
+(UUID(), 'registration', 'Welcome to Wayfairs', 'Hello {first_name},\n\nYour account has been created. You can sign in at {site_url}.'),
+(UUID(), 'deposit', 'Deposit request received', 'Hello {first_name},\n\nWe received your deposit request for {amount} {currency}. It will be reviewed and credited once confirmed.'),
+(UUID(), 'withdrawal', 'Withdrawal request received', 'Hello {first_name},\n\nWe received your withdrawal request for {amount} {currency}. The amount is held until it is processed.'),
+(UUID(), 'bank_transfer', 'Bank transfer submitted', 'Hello {first_name},\n\nYour bank transfer of {amount} {currency} to {beneficiary} has been submitted and is being processed.'),
+(UUID(), 'bill_payment', 'Bill payment submitted', 'Hello {first_name},\n\nYour bill payment of {amount} {currency} to {biller} has been submitted and is being processed.'),
+(UUID(), 'topup', 'Top-up received', 'Hello {first_name},\n\nA top-up of {amount} {currency} has been credited to your account.'),
+(UUID(), 'debit', 'Debit recorded', 'Hello {first_name},\n\nA debit of {amount} {currency} has been recorded on your account.'),
+(UUID(), 'flight_request', 'Flight request received', 'Hello {first_name},\n\nWe received your flight request from {origin} to {destination}. We will contact you to confirm availability and price.');
+
 -- ==== migration ledger (matches the application checksums) ====
 INSERT INTO schema_migrations (version, checksum, applied_at) VALUES
     ('001_core', 'b005c9d14426caf95b8834c76c94d86a01ae14210a33766935160f30e67df25e', UTC_TIMESTAMP(6)),
@@ -556,4 +594,5 @@ INSERT INTO schema_migrations (version, checksum, applied_at) VALUES
     ('003_bank_transfers_and_usd_rates', '11b64eadc10a767c764dc4447384e5914dea97fc09890f91eda62597f6b3f5a9', UTC_TIMESTAMP(6)),
     ('004_bill_payments_and_open_limits', '4fda0fa746fe5c15e257b651bc68c284c44a6a98f16ca9a208235f8b05a5b72c', UTC_TIMESTAMP(6)),
     ('005_flight_requests', '58d69c73fbcb972320ea7da2d5cb318669c8065b56baa714aa39058a537be8cc', UTC_TIMESTAMP(6)),
-    ('006_beneficiaries', 'b60911b44ed0a4cc2ff656625bb6a63c4f4f3c0034c1f2d12dd1b47ace68ef1b', UTC_TIMESTAMP(6));
+    ('006_beneficiaries', 'b60911b44ed0a4cc2ff656625bb6a63c4f4f3c0034c1f2d12dd1b47ace68ef1b', UTC_TIMESTAMP(6)),
+    ('007_otp_and_email', '4973a91448907c47f7382cf3c04bae30099ce9a13fc042f0078b6d86b9c18665', UTC_TIMESTAMP(6));

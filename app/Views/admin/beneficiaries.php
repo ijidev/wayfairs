@@ -15,18 +15,44 @@ $countries = wayfairs_countries();
       <input type="hidden" name="_token" value="<?= e(wayfairs_csrf()) ?>" />
       <div class="form-grid">
         <label>Nickname<input name="nickname" maxlength="80" placeholder="e.g. Head office rent" required /></label>
-        <label>Route<select name="route" required><option value="iban">IBAN (international)</option><option value="local">Local account number</option></select></label>
+        <label>Route<select name="route" id="beneficiary-route" required><option value="iban">IBAN (international)</option><option value="local">Local account number</option></select></label>
         <label>Country<select name="country_code" required><option value="">Select country or territory</option><?php foreach ($countries as $code => $country): ?><option value="<?= e($code) ?>"><?= e($country) ?></option><?php endforeach; ?></select></label>
         <label>Account holder name<input name="beneficiary_name" maxlength="160" required /></label>
         <label>Bank name<input name="bank_name" maxlength="160" required /></label>
         <label>Bank address <span class="field-hint">Optional</span><input name="bank_address" maxlength="300" /></label>
         <label class="wide">Beneficiary address <span class="field-hint">Optional</span><input name="beneficiary_address" maxlength="300" /></label>
-        <label>IBAN <span class="field-hint">For the IBAN route</span><input class="uppercase-input" name="iban" maxlength="48" autocomplete="off" /></label>
+      </div>
+      <div class="form-grid route-fields" data-route-group="iban">
+        <label>IBAN<input class="uppercase-input" name="iban" maxlength="48" autocomplete="off" /></label>
         <label>SWIFT / BIC <span class="field-hint">Optional</span><input class="uppercase-input" name="swift_bic" maxlength="11" autocomplete="off" /></label>
-        <label>Account number <span class="field-hint">For the local route</span><input name="account_number" maxlength="40" autocomplete="off" /></label>
+      </div>
+      <div class="form-grid route-fields" data-route-group="local" hidden>
+        <label>Account number<input name="account_number" maxlength="40" autocomplete="off" /></label>
         <label>Routing / sort / transit code <span class="field-hint">Optional</span><input name="routing_code" maxlength="40" autocomplete="off" /></label>
       </div>
+      <noscript><style>[data-route-group]{display:grid!important}</style></noscript>
       <div class="receipt-footnote"><?= wayfairs_icon('security') ?><span>Enter either an IBAN or an account number for the route you chose. Publishing a beneficiary is recorded in the audit log.</span></div>
+
+<script>
+(function () {
+  var routeSelect = document.getElementById('beneficiary-route');
+  var groups = document.querySelectorAll('[data-route-group]');
+  if (!routeSelect) return;
+  function sync() {
+    var route = routeSelect.value;
+    groups.forEach(function (group) {
+      var active = group.getAttribute('data-route-group') === route;
+      group.hidden = !active;
+      group.querySelectorAll('input').forEach(function (input) {
+        input.disabled = !active;
+        if (!active) input.value = '';
+      });
+    });
+  }
+  routeSelect.addEventListener('change', sync);
+  sync();
+})();
+</script>
       <div class="form-actions"><button class="btn full" type="submit">Publish beneficiary</button></div>
     </form>
   </article>
