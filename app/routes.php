@@ -329,7 +329,7 @@ return function (Router $router, Database $database): void {
         $page('user/review', ['kind' => $kind, 'preview' => $preview, 'input' => $input, 'countries' => wayfairs_countries()]);
     };
 
-    $confirmMovement = static function (string $kind) use ($banking, $attempt, $movementDestination, $beneficiaries, $otp): never {
+    $confirmMovement = static function (string $kind) use ($banking, $database, $attempt, $movementDestination, $beneficiaries, $otp, $mailer, $emailTemplates): never {
         $user = Context::user() ?? [];
         $back = $kind === 'bill' ? '/bills' : '/transfer';
         $input = Draft::take('review.' . $kind);
@@ -398,7 +398,7 @@ return function (Router $router, Database $database): void {
     $router->post('/transfer/confirm', static fn () => $confirmMovement('transfer'), 'auth', true);
     $router->post('/bills/confirm', static fn () => $confirmMovement('bill'), 'auth', true);
 
-    $verifyOtp = static function (string $kind) use ($otp, $banking, $movementDestination, $beneficiaries, $attempt): never {
+    $verifyOtp = static function (string $kind) use ($otp, $banking, $database, $movementDestination, $beneficiaries, $attempt, $mailer, $emailTemplates): never {
         $user = Context::user() ?? [];
         $back = $kind === 'bill' ? '/bills' : '/transfer';
         $otpEntry = Draft::get('otp.' . $kind);
