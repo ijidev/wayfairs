@@ -799,8 +799,9 @@ return function (Router $router, Database $database): void {
         $admin('admin/otp', ['enabled' => $otp->isEnabled()]);
     }, 'admin');
 
-    $router->post('/admin/otp', static function (Request $request) use ($otp, $audit, $attempt): never {
-        $attempt(static function () use ($otp, $audit, $request): void {
+    $router->post('/admin/otp', static function (Request $request) use ($database, $otp, $audit, $attempt): never {
+        $attempt(static function () use ($database, $otp, $audit, $request): void {
+            $settings = new SiteSettings($database);
             $enable = (string) $request->post('enabled', '0') === '1';
             $settings->update('feature.otp', $enable ? '1' : '0', (string) Context::user()['id'], false);
             $audit->record($enable ? 'feature.otp.enabled' : 'feature.otp.disabled', 'site_setting', 'feature.otp', null, []);
@@ -887,8 +888,9 @@ return function (Router $router, Database $database): void {
         ]);
     }, 'admin');
 
-    $router->post('/admin/features/bank-transfers', static function (Request $request) use ($settings, $audit, $attempt): never {
-        $attempt(static function () use ($settings, $audit, $request): void {
+    $router->post('/admin/features/bank-transfers', static function (Request $request) use ($database, $audit, $attempt): never {
+        $attempt(static function () use ($database, $audit, $request): void {
+            $settings = new SiteSettings($database);
             $enable = (string) $request->post('enabled', '0') === '1';
             if ($enable) {
                 Security::assertServerReady();
