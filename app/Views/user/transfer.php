@@ -13,14 +13,26 @@ $oldValue = static fn (string $key, string $default = ''): string => (string) ($
 $route = $oldValue('transfer_route', 'iban') === 'local' ? 'local' : 'iban';
 $disabled = $verified ? '' : 'disabled';
 $beneficiaries = $beneficiaries ?? [];
+$panels = ['new' => 'New transfer', 'beneficiaries' => 'Beneficiaries', 'history' => 'History', 'internal' => 'Wayfairs transfers'];
+$activePanel = (string) ($_GET['panel'] ?? 'new');
+if (!array_key_exists($activePanel, $panels)) {
+    $activePanel = 'new';
+}
 ?>
 <header class="page-header">
   <div class="page-heading"><span class="page-icon"><?= wayfairs_icon('transfer') ?></span><div class="page-heading-copy"><span class="page-kicker">International payments</span><h1>Bank transfer</h1><p>Send from a fiat wallet to a beneficiary bank account. You review every detail before anything is sent.</p></div></div>
   <div class="page-actions"><?= wayfairs_pill('kyc ' . $kycStatus) ?><a class="btn ghost" href="<?= e(wayfairs_url('/transactions')) ?>">Transactions</a></div>
 </header>
 
+<nav class="subnav" aria-label="Transfer sections">
+  <?php foreach ($panels as $key => $label): ?>
+    <a class="subnav-link<?= $activePanel === $key ? ' active' : '' ?>" href="<?= e(wayfairs_url('/transfer?panel=' . $key)) ?>" data-panel="<?= e($key) ?>"><?= e($label) ?></a>
+  <?php endforeach; ?>
+</nav>
+
 <?php if (!$verified): ?><div class="notice warn"><?= wayfairs_icon('verification') ?><div><strong>Verification approval is required</strong><p>Bank and internal transfers remain unavailable until your identity status is verified.</p><p><a class="btn small" href="<?= e(wayfairs_url('/kyc')) ?>">Go to verification</a></p></div></div><?php endif; ?>
 
+<?php if ($activePanel === 'new'): ?>
 <section class="content-grid">
   <article class="card form-card bank-transfer-form">
     <div class="form-intro"><span class="page-kicker">New payment</span><h2>Beneficiary transfer</h2><p>Enter the details, then review them on the next page before anything is sent.</p></div>
@@ -31,7 +43,6 @@ $beneficiaries = $beneficiaries ?? [];
     <?php else: ?>
       <form class="stack" method="post" action="<?= e(wayfairs_url('/transfer/review')) ?>" id="bank-transfer-form">
         <input type="hidden" name="_token" value="<?= e(wayfairs_csrf()) ?>" />
-
         <div class="form-section-title"><span>1</span><div><strong>Transfer amount</strong><small>USD is selected by default when available.</small></div></div>
         <div class="form-grid">
           <label>Account currency
@@ -75,19 +86,19 @@ $beneficiaries = $beneficiaries ?? [];
           <label>Account number<input name="account_number" id="transfer-account" maxlength="40" inputmode="numeric" autocomplete="off" value="<?= e($oldValue('account_number')) ?>" <?= $disabled ?> /></label>
           <label>Routing / sort / transit code <span class="field-hint">Optional</span><input name="routing_code" id="transfer-routing" maxlength="40" autocomplete="off" value="<?= e($oldValue('routing_code')) ?>" <?= $disabled ?> /></label>
         </div>
-        <div class="form-grid">
-          <label>Bank name<input name="bank_name" id="transfer-bank-name" maxlength="160" autocomplete="organization" value="<?= e($oldValue('bank_name')) ?>" required <?= $disabled ?> /></label>
-          <label>Bank address <span class="field-hint">Optional</span><input name="bank_address" id="transfer-bank-address" maxlength="300" value="<?= e($oldValue('bank_address')) ?>" <?= $disabled ?> /></label>
-        </div>
+        <noscript><style>[data-route-group]{display:grid!important}</style><p class="field-hint route-noscript-note">JavaScript is turned off, so both the IBAN and local account number fields are shown. Fill in the one your beneficiary's bank uses and leave the other empty.</p></noscript>
+        <p class="notice brand" id="beneficiary-match" role="status" hidden></p>
+
         <div class="form-section-title"><span>3</span><div><strong>Beneficiary</strong><small>Enter the legal recipient details held by their bank.</small></div></div>
         <div class="form-grid">
           <label>Beneficiary country<select name="country_code" id="transfer-country" required <?= $disabled ?>><option value="">Select country or territory</option><?php foreach ($countries as $code => $country): ?><option value="<?= e($code) ?>" <?= $oldValue('country_code') === $code ? 'selected' : '' ?>><?= e($country) ?></option><?php endforeach; ?></select></label>
           <label>Account holder name<input name="beneficiary_name" id="transfer-beneficiary-name" maxlength="160" autocomplete="name" placeholder="Full legal name" value="<?= e($oldValue('beneficiary_name')) ?>" required <?= $disabled ?> /></label>
           <label class="wide">Beneficiary address <span class="field-hint">Optional</span><input name="beneficiary_address" id="transfer-beneficiary-address" maxlength="300" autocomplete="street-address" placeholder="Street, city, postal code" value="<?= e($oldValue('beneficiary_address')) ?>" <?= $disabled ?> /></label>
         </div>
-        <p class="notice brand" id="beneficiary-match" role="status" hidden></p>
-
-        <noscript><style>[data-route-group]{display:grid!important}</style><p class="field-hint route-noscript-note">JavaScript is turned off, so both the IBAN and local account number fields are shown. Fill in the one your beneficiary's bank uses and leave the other empty.</p></noscript>
+        <div class="form-grid">
+          <label>Bank name<input name="bank_name" id="transfer-bank-name" maxlength="160" autocomplete="organization" value="<?= e($oldValue('bank_name')) ?>" required <?= $disabled ?> /></label>
+          <label>Bank address <span class="field-hint">Optional</span><input name="bank_address" id="transfer-bank-address" maxlength="300" value="<?= e($oldValue('bank_address')) ?>" <?= $disabled ?> /></label>
+        </div>
 
         <div class="form-section-title"><span>4</span><div><strong>Remember this beneficiary</strong><small>Optional. Saved beneficiaries fill in automatically next time you enter their account number.</small></div></div>
         <label class="inline-check"><input type="checkbox" name="save_beneficiary" value="1" <?= $oldValue('save_beneficiary') === '1' ? 'checked' : '' ?> <?= $disabled ?> /> Save to my beneficiaries</label>
@@ -127,101 +138,32 @@ $beneficiaries = $beneficiaries ?? [];
         </div>
       <?php endif; ?>
     </article>
-
-    <details class="card asset-create static internal-transfer-panel">
-      <summary><span><span class="page-kicker">Wayfairs network</span><strong>Send to another customer</strong></span><span class="btn small ghost">Open</span></summary>
-      <form class="stack" method="post" action="<?= e(wayfairs_url('/transfer/internal')) ?>">
-        <input type="hidden" name="_token" value="<?= e(wayfairs_csrf()) ?>" /><input type="hidden" name="idem" value="<?= e(wayfairs_idem()) ?>" />
-        <label>Customer email<input type="email" name="recipient_email" placeholder="customer@example.com" required <?= $disabled ?> /></label>
-        <div class="form-grid"><label>Currency<select name="asset_code" required <?= $disabled ?>><?php foreach ($accounts as $account): $asset = $account['asset']; ?><option value="<?= e((string) $asset['code']) ?>" <?= (string) $asset['code'] === 'USD' ? 'selected' : '' ?>><?= e((string) $asset['name']) ?> (<?= e((string) $asset['code']) ?>)</option><?php endforeach; ?></select></label><label>Amount<input name="amount" inputmode="decimal" required <?= $disabled ?> /></label></div>
-        <label>Remark <span class="field-hint">Optional</span><input name="remark" maxlength="200" <?= $disabled ?> /></label>
-        <button class="btn full" type="submit" <?= $disabled ?>>Send instantly</button>
-      </form>
-    </details>
   </aside>
 </section>
+<?php endif; ?>
 
-<script>
-(function () {
-  var select = document.getElementById('transfer-asset');
-  var available = document.getElementById('transfer-available');
-  var usd = document.getElementById('transfer-usd');
-  var fee = document.getElementById('transfer-fee');
-  if (select) {
-    var sync = function () { var option = select.options[select.selectedIndex]; if (!option) return; if (available) available.textContent = option.getAttribute('data-available') || '—'; if (usd) usd.textContent = option.getAttribute('data-usd') || '—'; if (fee) fee.textContent = option.getAttribute('data-fee') || '—'; };
-    select.addEventListener('change', sync); sync();
-  }
-})();
+<?php if ($activePanel === 'beneficiaries'): ?>
+<section class="card table-card static">
+  <div class="panel-head"><div><h2>Your beneficiaries</h2><p>Saved by you, and published by Wayfairs. Enter one in the transfer form to fill its details.</p></div><span class="pill"><?= count($beneficiaries) ?> saved</span></div>
+  <?php if ($beneficiaries === []): ?>
+    <div class="empty-state"><div class="empty-icon"><?= wayfairs_icon('building') ?></div><h3>No beneficiaries yet</h3><p>Tick "Save to my beneficiaries" on a transfer to keep its details here.</p></div>
+  <?php else: ?>
+    <div class="table-wrap"><table><thead><tr><th>Nickname</th><th>Route</th><th>Account holder</th><th>Bank</th><th>Account</th><th>Scope</th><th>Action</th></tr></thead><tbody>
+    <?php foreach ($beneficiaries as $beneficiary): ?><tr>
+      <td><?= e((string) $beneficiary['nickname']) ?></td>
+      <td><?= e($beneficiary['route'] === 'iban' ? 'IBAN' : 'Local account') ?></td>
+      <td><?= e((string) $beneficiary['beneficiary_name']) ?></td>
+      <td><?= e((string) $beneficiary['bank_name']) ?></td>
+      <td>…<?= e((string) $beneficiary['identifier_last4']) ?></td>
+      <td><?= $beneficiary['scope'] === 'global' ? 'Wayfairs' : 'Saved by you' ?></td>
+      <td><?php if ($beneficiary['scope'] === 'user'): ?><form method="post" action="<?= e(wayfairs_url('/beneficiaries/' . $beneficiary['id'] . '/archive')) ?>"><input type="hidden" name="_token" value="<?= e(wayfairs_csrf()) ?>" /><button class="btn small ghost" type="submit">Remove</button></form><?php else: ?><span class="field-hint">—</span><?php endif; ?></td>
+    </tr><?php endforeach; ?>
+    </tbody></table></div>
+  <?php endif; ?>
+</section>
+<?php endif; ?>
 
-(function () {
-  var form = document.getElementById('bank-transfer-form');
-  if (!form) return;
-  var verified = <?= $verified ? 'true' : 'false' ?>;
-  var routes = form.querySelectorAll('input[name="transfer_route"]');
-  var groups = form.querySelectorAll('[data-route-group]');
-  function selectedRoute() {
-    var route = 'iban';
-    routes.forEach(function (radio) { if (radio.checked) route = radio.value; });
-    return route;
-  }
-  function syncRoute() {
-    var route = selectedRoute();
-    groups.forEach(function (group) {
-      var active = group.getAttribute('data-route-group') === route;
-      group.hidden = !active;
-      group.querySelectorAll('input').forEach(function (input) {
-        input.disabled = !active || !verified;
-        input.required = active && verified && (route === 'iban' ? input.name === 'iban' : input.name === 'account_number');
-        if (!active) input.value = '';
-      });
-    });
-  }
-  routes.forEach(function (radio) { radio.addEventListener('change', syncRoute); });
-  syncRoute();
-
-  var lookupUrl = <?= json_encode(wayfairs_url('/transfer/beneficiary')) ?>;
-  var notice = document.getElementById('beneficiary-match');
-  var timer = null;
-  var lastKey = '';
-  function setField(id, value) {
-    var field = document.getElementById(id);
-    if (field && value) field.value = value;
-  }
-  function lookup() {
-    var route = selectedRoute();
-    var input = form.querySelector(route === 'iban' ? '#transfer-iban' : '#transfer-account');
-    var identifier = input ? input.value.replace(/[^A-Za-z0-9]/g, '') : '';
-    var key = route + ':' + identifier;
-    if (identifier.length < 6 || key === lastKey) return;
-    lastKey = key;
-    fetch(lookupUrl + '?route=' + encodeURIComponent(route) + '&identifier=' + encodeURIComponent(identifier), { credentials: 'same-origin', headers: { 'Accept': 'application/json' } })
-      .then(function (response) { return response.json(); })
-      .then(function (data) {
-        if (!notice) return;
-        if (!data.found || !data.beneficiary) { notice.hidden = true; return; }
-        var b = data.beneficiary;
-        setField('transfer-beneficiary-name', b.beneficiary_name);
-        setField('transfer-beneficiary-address', b.beneficiary_address);
-        setField('transfer-bank-name', b.bank_name);
-        setField('transfer-bank-address', b.bank_address);
-        setField('transfer-swift', b.swift_bic);
-        setField('transfer-routing', b.routing_code);
-        var country = document.getElementById('transfer-country');
-        if (country && b.country_code) country.value = b.country_code;
-        notice.textContent = 'Filled in from ' + (b.scope === 'global' ? 'a Wayfairs beneficiary' : 'your saved beneficiary') + ': ' + b.nickname + '. Check the details before you review.';
-        notice.hidden = false;
-      })
-      .catch(function () {});
-  }
-  ['transfer-iban', 'transfer-account'].forEach(function (id) {
-    var field = document.getElementById(id);
-    if (!field) return;
-    field.addEventListener('input', function () { clearTimeout(timer); timer = setTimeout(lookup, 400); });
-    field.addEventListener('change', lookup);
-  });
-})();
-</script>
-
+<?php if ($activePanel === 'history'): ?>
 <section class="card table-card static">
   <div class="panel-head"><div><h2>Bank transfer history</h2><p>Your bank transfers, their current status, and an estimated USD value.</p></div><span class="pill"><?= count($bankTransfers) ?> loaded</span></div>
   <?php if ($bankTransfers === []): ?>
@@ -232,12 +174,17 @@ $beneficiaries = $beneficiaries ?? [];
     </tbody></table></div>
   <?php endif; ?>
 </section>
+<?php endif; ?>
 
-<?php if ($internalTransfers !== []): ?>
+<?php if ($activePanel === 'internal'): ?>
 <section class="card table-card static">
   <div class="panel-head"><div><h2>Wayfairs transfers</h2><p>Instant payments between customer accounts.</p></div><span class="pill"><?= count($internalTransfers) ?> loaded</span></div>
-  <div class="table-wrap"><table><thead><tr><th>Date</th><th>Direction</th><th>Counterparty</th><th>Amount</th><th>USD equivalent</th><th>Remark</th></tr></thead><tbody>
-  <?php foreach ($internalTransfers as $transfer): $sent = (string) $transfer['sender_user_id'] === $me; $rate = $usdRates[$transfer['asset_code']] ?? null; ?><tr><td><?= e(wayfairs_datetime((string) $transfer['created_at'])) ?></td><td><?= wayfairs_pill($sent ? 'sent' : 'received') ?></td><td><?= e($sent ? (string) $transfer['recipient_email'] : (string) $transfer['sender_email']) ?></td><td class="cell-amount <?= $sent ? 'amount-negative' : 'amount-positive' ?>"><?= e(($sent ? '−' : '+') . wayfairs_amount((int) $transfer['amount_minor'], (int) $transfer['asset_scale'], (string) $transfer['asset_symbol'], (string) $transfer['asset_code'])) ?></td><td><?= e(wayfairs_usd_equivalent((int) $transfer['amount_minor'], (int) $transfer['asset_scale'], $rate)) ?></td><td><?= e(trim((string) ($transfer['note'] ?? '')) !== '' ? (string) $transfer['note'] : '—') ?></td></tr><?php endforeach; ?>
-  </tbody></table></div>
+  <?php if ($internalTransfers === []): ?>
+    <div class="empty-state"><div class="empty-icon"><?= wayfairs_icon('building') ?></div><h3>No Wayfairs transfers</h3><p>Instant payments to other Wayfairs customers will appear here.</p></div>
+  <?php else: ?>
+    <div class="table-wrap"><table><thead><tr><th>Date</th><th>Direction</th><th>Counterparty</th><th>Amount</th><th>USD equivalent</th><th>Remark</th></tr></thead><tbody>
+    <?php foreach ($internalTransfers as $transfer): $sent = (string) $transfer['sender_user_id'] === $me; $rate = $usdRates[$transfer['asset_code']] ?? null; ?><tr><td><?= e(wayfairs_datetime((string) $transfer['created_at'])) ?></td><td><?= wayfairs_pill($sent ? 'sent' : 'received') ?></td><td><?= e($sent ? (string) $transfer['recipient_email'] : (string) $transfer['sender_email']) ?></td><td class="cell-amount <?= $sent ? 'amount-negative' : 'amount-positive' ?>"><?= e(($sent ? '−' : '+') . wayfairs_amount((int) $transfer['amount_minor'], (int) $transfer['asset_scale'], (string) $transfer['asset_symbol'], (string) $transfer['asset_code'])) ?></td><td><?= e(wayfairs_usd_equivalent((int) $transfer['amount_minor'], (int) $transfer['asset_scale'], $rate)) ?></td><td><?= e(trim((string) ($transfer['note'] ?? '')) !== '' ? (string) $transfer['note'] : '—') ?></td></tr><?php endforeach; ?>
+    </tbody></table></div>
+  <?php endif; ?>
 </section>
 <?php endif; ?>

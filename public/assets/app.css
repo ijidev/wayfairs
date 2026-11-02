@@ -528,6 +528,12 @@ body.app-shell{
 .utility-card.is-unavailable .icon-wrap{background:var(--card);color:var(--muted)}
 @media (max-width:640px){.utility-grid{grid-template-columns:1fr}}
 
+.subnav{display:flex;flex-wrap:wrap;gap:.5rem;padding:.35rem;background:var(--card);border:1px solid var(--line);border-radius:14px}
+.subnav-link{padding:.55rem .9rem;border-radius:10px;color:var(--muted);font-weight:750;font-size:.86rem;text-decoration:none;border:1px solid transparent}
+.subnav-link:hover{color:var(--ink);background:var(--paper);text-decoration:none}
+.subnav-link.active{color:var(--brand-2);background:var(--brand-soft);border-color:#a8d5c8}
+@media (max-width:640px){.subnav{gap:.35rem}.subnav-link{padding:.45rem .7rem;font-size:.8rem}}
+
 .review-list{display:grid;gap:.6rem;margin:0}
 .review-list>div{display:grid;grid-template-columns:minmax(9rem,38%) 1fr;gap:.75rem;padding:.55rem 0;border-bottom:1px solid var(--line)}
 .review-list dt{font-size:.8rem;color:var(--muted)}

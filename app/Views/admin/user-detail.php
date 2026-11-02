@@ -5,12 +5,31 @@ declare(strict_types=1);
 $kycStatus = (string) ($kyc['status'] ?? 'not_started');
 $customerName = trim((string) $profile['first_name'] . ' ' . (string) $profile['last_name']);
 $initials = mb_strtoupper(mb_substr((string) $profile['first_name'], 0, 1) . mb_substr((string) $profile['last_name'], 0, 1));
+$panels = [
+    'overview' => 'Overview',
+    'verification' => 'Verification',
+    'support' => 'Support access',
+    'funding' => 'Fund / debit',
+    'restrictions' => 'Restrictions',
+    'transactions' => 'Transactions',
+];
+$activePanel = (string) ($_GET['panel'] ?? 'overview');
+if (!array_key_exists($activePanel, $panels)) {
+    $activePanel = 'overview';
+}
 ?>
 <header class="page-header">
   <div class="page-heading"><span class="page-icon"><?= wayfairs_icon('user') ?></span><div class="page-heading-copy"><span class="page-kicker">Customer account</span><h1><?= e($customerName) ?></h1><p><?= e((string) $profile['email']) ?> · registered <?= e(wayfairs_datetime((string) $profile['created_at'])) ?></p></div></div>
   <div class="page-actions"><a class="btn ghost" href="<?= e(wayfairs_url('/admin/users')) ?>">Customer directory</a><a class="btn" href="<?= e(wayfairs_url('/admin/users/' . $profile['id'] . '/edit')) ?>"><?= wayfairs_icon('settings') ?> Edit customer</a></div>
 </header>
 
+<nav class="subnav" aria-label="Customer sections">
+  <?php foreach ($panels as $key => $label): ?>
+    <a class="subnav-link<?= $activePanel === $key ? ' active' : '' ?>" href="<?= e(wayfairs_url('/admin/users/' . $profile['id'] . '?panel=' . $key)) ?>" data-panel="<?= e($key) ?>"><?= e($label) ?></a>
+  <?php endforeach; ?>
+</nav>
+
+<?php if ($activePanel === 'overview'): ?>
 <section class="profile-hero">
   <span class="profile-avatar"><?= e($initials ?: 'U') ?></span>
   <span class="profile-hero-copy"><span class="page-kicker">Customer profile</span><h2><?= e($customerName) ?></h2><p><?= e((string) $profile['email']) ?><?= !empty($profile['phone']) ? ' · ' . e((string) $profile['phone']) : '' ?></p></span>
@@ -24,6 +43,21 @@ $initials = mb_strtoupper(mb_substr((string) $profile['first_name'], 0, 1) . mb_
   <div class="metric-card <?= in_array($kycStatus, ['pending', 'in_review', 'needs_resubmission'], true) ? 'warn' : '' ?>"><span class="metric-icon"><?= wayfairs_icon('verification') ?></span><span class="metric-copy"><strong class="metric-value long"><?= e(ucwords(str_replace('_', ' ', $kycStatus))) ?></strong><span class="metric-label">Verification status</span></span></div>
 </section>
 
+<section class="card static">
+  <div class="panel-head"><div><h2>Currency accounts</h2><p>Available, reserved, and total balances remain separate by currency.</p></div><span class="pill"><?= count($accounts) ?> account<?= count($accounts) === 1 ? '' : 's' ?></span></div>
+  <?php if ($accounts === []): ?>
+    <div class="empty-state"><div class="empty-icon"><?= wayfairs_icon('wallet') ?></div><h3>No currency accounts</h3><p>No customer accounts have been opened.</p></div>
+  <?php else: ?>
+    <div class="asset-summary-grid">
+      <?php foreach ($accounts as $account): $held = (int) ($account['held_minor'] ?? 0); $available = (int) $account['available_minor']; $rate = $usdRates[$account['code']] ?? null; ?>
+        <article class="asset-summary account-admin-card"><div class="asset-summary-top"><span class="asset-summary-code"><?= e((string) $account['code']) ?></span><?= wayfairs_pill((string) $account['status']) ?></div><strong><?= e(wayfairs_amount($available, (int) $account['scale'], (string) $account['symbol'], (string) $account['code'])) ?></strong><small><?= e(wayfairs_usd_equivalent($available + $held, (int) $account['scale'], $rate)) ?> total equivalent</small><small>Available · <?= e(wayfairs_amount($held, (int) $account['scale'], (string) $account['symbol'])) ?> reserved</small><small class="mono"><?= e((string) $account['account_number']) ?></small><form class="stack account-status-form" method="post" action="<?= e(wayfairs_url('/admin/users/' . $profile['id'] . '/accounts/' . $account['id'] . '/status')) ?>"><input type="hidden" name="_token" value="<?= e(wayfairs_csrf()) ?>" /><label>Account access<select name="status"><option value="active" <?= $account['status'] === 'active' ? 'selected' : '' ?>>Active</option><option value="restricted" <?= $account['status'] === 'restricted' ? 'selected' : '' ?>>Restricted</option><option value="frozen" <?= $account['status'] === 'frozen' ? 'selected' : '' ?>>Frozen</option><option value="closed" <?= $account['status'] === 'closed' ? 'selected' : '' ?>>Closed</option></select></label><label>Remark <span class="field-hint">Optional</span><input name="admin_remark" maxlength="500" /></label><button class="btn small ghost" type="submit">Update account</button></form></article>
+      <?php endforeach; ?>
+    </div>
+  <?php endif; ?>
+</section>
+<?php endif; ?>
+
+<?php if ($activePanel === 'verification'): ?>
 <section class="content-grid equal">
   <article class="card form-card">
     <div class="form-intro"><h2>Verification review</h2><p>Inspect the stored customer submission and record a reasoned decision.</p></div>
@@ -46,7 +80,11 @@ $initials = mb_strtoupper(mb_substr((string) $profile['first_name'], 0, 1) . mb_
       <div class="form-actions"><button class="btn" type="submit">Record verification decision</button></div>
     </form>
   </article>
+</section>
+<?php endif; ?>
 
+<?php if ($activePanel === 'support'): ?>
+<section class="content-grid equal">
   <article class="card form-card">
     <div class="form-intro"><h2>View customer dashboard</h2><p>Open a time-limited audited support session using your current administrator credentials.</p></div>
     <div class="notice brand"><?= wayfairs_icon('security') ?><div><strong>Support access</strong><p>Use the separate balance-adjustment control below for funding or debiting an account.</p></div></div>
@@ -58,7 +96,9 @@ $initials = mb_strtoupper(mb_substr((string) $profile['first_name'], 0, 1) . mb_
     </form>
   </article>
 </section>
+<?php endif; ?>
 
+<?php if ($activePanel === 'funding'): ?>
 <section class="content-grid">
   <article class="card form-card admin-adjustment-card">
     <div class="form-intro"><span class="page-kicker">Ledger operation</span><h2>Fund or debit customer</h2><p>Post an explicit balanced adjustment to one currency account without entering support impersonation.</p></div>
@@ -86,7 +126,9 @@ $initials = mb_strtoupper(mb_substr((string) $profile['first_name'], 0, 1) . mb_
     </div>
   </aside>
 </section>
+<?php endif; ?>
 
+<?php if ($activePanel === 'restrictions'): ?>
 <section class="content-grid">
   <article class="card form-card">
     <div class="panel-head"><div><h2>Capability restrictions</h2><p>Active backend-enforced blocks for this customer.</p></div><span class="pill <?= $restrictions === [] ? 'good' : 'bad' ?>"><?= count($restrictions) ?> active</span></div>
@@ -107,7 +149,6 @@ $initials = mb_strtoupper(mb_substr((string) $profile['first_name'], 0, 1) . mb_
       </div>
     <?php endif; ?>
   </article>
-
   <aside class="card form-card sticky-panel">
     <div class="form-intro"><h2>Apply a restriction</h2><p>A reason of at least 10 characters is required and audited.</p></div>
     <form class="stack" method="post" action="<?= e(wayfairs_url('/admin/users/' . $profile['id'] . '/restrict')) ?>">
@@ -122,20 +163,9 @@ $initials = mb_strtoupper(mb_substr((string) $profile['first_name'], 0, 1) . mb_
     </form>
   </aside>
 </section>
+<?php endif; ?>
 
-<section class="card static">
-  <div class="panel-head"><div><h2>Currency accounts</h2><p>Available, reserved, and total balances remain separate by currency.</p></div><span class="pill"><?= count($accounts) ?> account<?= count($accounts) === 1 ? '' : 's' ?></span></div>
-  <?php if ($accounts === []): ?>
-    <div class="empty-state"><div class="empty-icon"><?= wayfairs_icon('wallet') ?></div><h3>No currency accounts</h3><p>No customer accounts have been opened.</p></div>
-  <?php else: ?>
-    <div class="asset-summary-grid">
-      <?php foreach ($accounts as $account): $held = (int) ($account['held_minor'] ?? 0); $available = (int) $account['available_minor']; $rate = $usdRates[$account['code']] ?? null; ?>
-        <article class="asset-summary account-admin-card"><div class="asset-summary-top"><span class="asset-summary-code"><?= e((string) $account['code']) ?></span><?= wayfairs_pill((string) $account['status']) ?></div><strong><?= e(wayfairs_amount($available, (int) $account['scale'], (string) $account['symbol'], (string) $account['code'])) ?></strong><small><?= e(wayfairs_usd_equivalent($available + $held, (int) $account['scale'], $rate)) ?> total equivalent</small><small>Available · <?= e(wayfairs_amount($held, (int) $account['scale'], (string) $account['symbol'])) ?> reserved</small><small class="mono"><?= e((string) $account['account_number']) ?></small><form class="stack account-status-form" method="post" action="<?= e(wayfairs_url('/admin/users/' . $profile['id'] . '/accounts/' . $account['id'] . '/status')) ?>"><input type="hidden" name="_token" value="<?= e(wayfairs_csrf()) ?>" /><label>Account access<select name="status"><option value="active" <?= $account['status'] === 'active' ? 'selected' : '' ?>>Active</option><option value="restricted" <?= $account['status'] === 'restricted' ? 'selected' : '' ?>>Restricted</option><option value="frozen" <?= $account['status'] === 'frozen' ? 'selected' : '' ?>>Frozen</option><option value="closed" <?= $account['status'] === 'closed' ? 'selected' : '' ?>>Closed</option></select></label><label>Remark <span class="field-hint">Optional</span><input name="admin_remark" maxlength="500" /></label><button class="btn small ghost" type="submit">Update account</button></form></article>
-      <?php endforeach; ?>
-    </div>
-  <?php endif; ?>
-</section>
-
+<?php if ($activePanel === 'transactions'): ?>
 <section class="card table-card static">
   <div class="panel-head"><div><h2>Customer transactions</h2><p>Latest 100 persisted records across this customer's accounts.</p></div><span class="pill"><?= count($history) ?> loaded</span></div>
   <?php if ($history === []): ?>
@@ -146,3 +176,4 @@ $initials = mb_strtoupper(mb_substr((string) $profile['first_name'], 0, 1) . mb_
     </tbody></table></div>
   <?php endif; ?>
 </section>
+<?php endif; ?>
