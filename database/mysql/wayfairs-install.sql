@@ -587,6 +587,131 @@ INSERT INTO email_templates (id, template_key, subject, body) VALUES
 (UUID(), 'debit', 'Debit recorded', 'Hello {first_name},\n\nA debit of {amount} {currency} has been recorded on your account.'),
 (UUID(), 'flight_request', 'Flight request received', 'Hello {first_name},\n\nWe received your flight request from {origin} to {destination}. We will contact you to confirm availability and price.');
 
+-- ==== migration 008_professional_emails (source: 008_professional_emails.sql) ====
+-- Professional transactional email copy. Existing rows are overwritten once; later
+-- administrator edits are preserved because this migration runs only once.
+UPDATE email_templates SET subject = 'Welcome to Wayfairs', body = 'Dear {first_name},
+
+Welcome to Wayfairs. Your account has been created and is ready to use.
+
+Sign in to complete identity verification before you deposit, withdraw, or transfer funds. Verification is required for all money movement.
+
+If you did not create this account, contact support immediately.
+
+Regards,
+Wayfairs', updated_at = CURRENT_TIMESTAMP(6) WHERE template_key = 'registration';
+
+UPDATE email_templates SET subject = 'Deposit request received - {amount} {currency}', body = 'Dear {first_name},
+
+We have received your deposit request.
+
+Amount: {amount} {currency}
+Reference: {reference}
+Status: Pending verification
+
+The funds will be credited to your account once the deposit is confirmed. You will receive another notification when it is processed.
+
+Regards,
+Wayfairs', updated_at = CURRENT_TIMESTAMP(6) WHERE template_key = 'deposit';
+
+UPDATE email_templates SET subject = 'Withdrawal request received - {amount} {currency}', body = 'Dear {first_name},
+
+We have received your withdrawal request.
+
+Amount: {amount} {currency}
+Reference: {reference}
+Status: Pending
+
+The amount has been held from your available balance and will be released to your nominated account once processed. You will receive another notification when it is completed.
+
+Regards,
+Wayfairs', updated_at = CURRENT_TIMESTAMP(6) WHERE template_key = 'withdrawal';
+
+UPDATE email_templates SET subject = 'Bank transfer submitted - {amount} {currency}', body = 'Dear {first_name},
+
+Your bank transfer has been submitted.
+
+Amount: {amount} {currency}
+Beneficiary: {beneficiary}
+Reference: {reference}
+Status: Pending settlement
+
+The amount has been held from your available balance. You will be notified when the transfer is completed or returned.
+
+Regards,
+Wayfairs', updated_at = CURRENT_TIMESTAMP(6) WHERE template_key = 'bank_transfer';
+
+UPDATE email_templates SET subject = 'Bill payment submitted - {amount} {currency}', body = 'Dear {first_name},
+
+Your bill payment has been submitted.
+
+Amount: {amount} {currency}
+Biller: {biller}
+Reference: {reference}
+Status: Pending settlement
+
+The amount has been held from your available balance. You will be notified when the payment is completed or returned.
+
+Regards,
+Wayfairs', updated_at = CURRENT_TIMESTAMP(6) WHERE template_key = 'bill_payment';
+
+UPDATE email_templates SET subject = 'Account credited - {amount} {currency}', body = 'Dear {first_name},
+
+Your account has been credited.
+
+Amount: {amount} {currency}
+Reference: {reference}
+Date: {date}
+
+Regards,
+Wayfairs', updated_at = CURRENT_TIMESTAMP(6) WHERE template_key = 'topup';
+
+UPDATE email_templates SET subject = 'Account debited - {amount} {currency}', body = 'Dear {first_name},
+
+Your account has been debited.
+
+Amount: {amount} {currency}
+Reference: {reference}
+Date: {date}
+
+If you did not authorize this transaction, contact support immediately.
+
+Regards,
+Wayfairs', updated_at = CURRENT_TIMESTAMP(6) WHERE template_key = 'debit';
+
+UPDATE email_templates SET subject = 'Your Wayfairs verification code', body = 'Dear {first_name},
+
+Your verification code is {code}. It expires in {minutes} minutes.
+
+If you did not request this code, ignore this message and contact support if you are concerned about the security of your account.
+
+Regards,
+Wayfairs', updated_at = CURRENT_TIMESTAMP(6) WHERE template_key = 'otp';
+
+UPDATE email_templates SET subject = 'Flight request received', body = 'Dear {first_name},
+
+We have received your flight request.
+
+Route: {origin} to {destination}
+Status: Requested
+
+Our team will contact you to confirm availability and pricing before any booking is made. No charge has been applied at this stage.
+
+Regards,
+Wayfairs', updated_at = CURRENT_TIMESTAMP(6) WHERE template_key = 'flight_request';
+
+INSERT INTO email_templates (id, template_key, subject, body, updated_at) VALUES
+(CHAR(36) CHARACTER SET ascii..., 'account_status', 'Important update to your account', 'Dear {first_name},
+
+There has been an update to your account.
+
+Status: {status}
+
+If you have questions about this change, contact support.
+
+Regards,
+Wayfairs', CURRENT_TIMESTAMP(6));
+
 -- ==== migration ledger (matches the application checksums) ====
 INSERT INTO schema_migrations (version, checksum, applied_at) VALUES
     ('001_core', 'b005c9d14426caf95b8834c76c94d86a01ae14210a33766935160f30e67df25e', UTC_TIMESTAMP(6)),
@@ -595,4 +720,5 @@ INSERT INTO schema_migrations (version, checksum, applied_at) VALUES
     ('004_bill_payments_and_open_limits', '4fda0fa746fe5c15e257b651bc68c284c44a6a98f16ca9a208235f8b05a5b72c', UTC_TIMESTAMP(6)),
     ('005_flight_requests', '58d69c73fbcb972320ea7da2d5cb318669c8065b56baa714aa39058a537be8cc', UTC_TIMESTAMP(6)),
     ('006_beneficiaries', 'b60911b44ed0a4cc2ff656625bb6a63c4f4f3c0034c1f2d12dd1b47ace68ef1b', UTC_TIMESTAMP(6)),
-    ('007_otp_and_email', '4973a91448907c47f7382cf3c04bae30099ce9a13fc042f0078b6d86b9c18665', UTC_TIMESTAMP(6));
+    ('007_otp_and_email', '4973a91448907c47f7382cf3c04bae30099ce9a13fc042f0078b6d86b9c18665', UTC_TIMESTAMP(6)),
+    ('008_professional_emails', '1950ab5db950da5dd674441407d588e8fd73388c96da1af507a83353014fd14d', UTC_TIMESTAMP(6));

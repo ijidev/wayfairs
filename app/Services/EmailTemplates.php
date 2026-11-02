@@ -9,7 +9,7 @@ use Wayfairs\Core\Database;
 
 final class EmailTemplates
 {
-    public const KEYS = ['registration', 'deposit', 'withdrawal', 'bank_transfer', 'bill_payment', 'topup', 'debit', 'otp', 'flight_request'];
+    public const KEYS = ['registration', 'deposit', 'withdrawal', 'bank_transfer', 'bill_payment', 'topup', 'debit', 'otp', 'flight_request', 'account_status'];
 
     public function __construct(private readonly Database $database)
     {

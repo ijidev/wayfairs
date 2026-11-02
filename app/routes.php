@@ -188,9 +188,24 @@ return function (Router $router, Database $database): void {
         ]);
     }, 'auth');
 
-    $router->post('/deposit', static function (Request $request) use ($banking, $attempt): never {
+    $router->post('/deposit', static function (Request $request) use ($banking, $database, $attempt, $mailer, $emailTemplates): never {
         $user = Context::user() ?? [];
-        $attempt(static fn () => $banking->submitDeposit((string) $user['id'], (string) $request->post('asset_code', ''), (string) $request->post('amount', ''), (string) $request->post('remark', ''), (string) $request->post('idem', '')), 'Deposit submitted for verification.', '/deposit');
+        $attempt(static function () use ($banking, $mailer, $emailTemplates, $user, $request): void {
+            $result = $banking->submitDeposit((string) $user['id'], (string) $request->post('asset_code', ''), (string) $request->post('amount', ''), (string) $request->post('remark', ''), (string) $request->post('idem', ''));
+            if (!Context::isImpersonating() && $mailer->isConfigured()) {
+                $asset = $banking->assetByCode((string) $request->post('asset_code', ''));
+                $transaction = $database->fetchOne('SELECT public_reference FROM transactions WHERE id = ?', [(string) ($result['transaction_id'] ?? '')]);
+                $rendered = $emailTemplates->render('deposit', [
+                    'first_name' => (string) ($user['first_name'] ?? ''),
+                    'amount' => wayfairs_major((int) $result['amount_minor'], (int) $asset['scale']),
+                    'currency' => (string) $asset['code'],
+                    'reference' => (string) ($transaction['public_reference'] ?? $result['id']),
+                ]);
+                if ($rendered !== null) {
+                    $mailer->send((string) $user['email'], $rendered['subject'], $rendered['body']);
+                }
+            }
+        }, 'Deposit submitted for verification.', '/deposit');
     }, 'auth', true);
 
     $router->get('/withdraw', static function () use ($page, $banking, $ledger, $accountRows, $me, $database, $kyc, $rates): void {
@@ -204,14 +219,29 @@ return function (Router $router, Database $database): void {
         ]);
     }, 'auth');
 
-    $router->post('/withdraw', static function (Request $request) use ($banking, $attempt): never {
+    $router->post('/withdraw', static function (Request $request) use ($banking, $database, $attempt, $mailer, $emailTemplates): never {
         $user = Context::user() ?? [];
         $destination = $request->allPost();
         foreach (['_token', 'asset_code', 'amount', 'idem', 'remark'] as $reserved) {
             unset($destination[$reserved]);
         }
         $destination = array_filter(array_map(static fn ($value) => is_string($value) ? trim($value) : '', $destination), static fn ($value) => $value !== '');
-        $attempt(static fn () => $banking->submitWithdrawal((string) $user['id'], (string) $request->post('asset_code', ''), (string) $request->post('amount', ''), $destination, (string) $request->post('idem', ''), (string) $request->post('remark', '')), 'Withdrawal submitted. The amount is reserved until it is processed.', '/withdraw');
+        $attempt(static function () use ($banking, $database, $mailer, $emailTemplates, $user, $request, $destination): void {
+            $result = $banking->submitWithdrawal((string) $user['id'], (string) $request->post('asset_code', ''), (string) $request->post('amount', ''), $destination, (string) $request->post('idem', ''), (string) $request->post('remark', ''));
+            if (!Context::isImpersonating() && $mailer->isConfigured()) {
+                $asset = $banking->assetByCode((string) $request->post('asset_code', ''));
+                $transaction = $database->fetchOne('SELECT public_reference FROM transactions WHERE id = ?', [(string) ($result['transaction_id'] ?? '')]);
+                $rendered = $emailTemplates->render('withdrawal', [
+                    'first_name' => (string) ($user['first_name'] ?? ''),
+                    'amount' => wayfairs_major((int) $result['amount_minor'], (int) $asset['scale']),
+                    'currency' => (string) $asset['code'],
+                    'reference' => (string) ($transaction['public_reference'] ?? $result['id']),
+                ]);
+                if ($rendered !== null) {
+                    $mailer->send((string) $user['email'], $rendered['subject'], $rendered['body']);
+                }
+            }
+        }, 'Withdrawal submitted. The amount is reserved until it is processed.', '/withdraw');
     }, 'auth', true);
 
     $router->get('/transfer', static function () use ($page, $banking, $ledger, $accountRows, $me, $database, $kyc, $rates, $beneficiaries): void {
@@ -323,6 +353,23 @@ return function (Router $router, Database $database): void {
             Draft::forget('form.' . $kind);
             Draft::forget('review.' . $kind);
             Draft::forget('otp.' . $kind);
+            if (!Context::isImpersonating() && $mailer->isConfigured()) {
+                $asset = $banking->assetByCode((string) $input['asset_code']);
+                $transaction = $database->fetchOne('SELECT public_reference FROM transactions WHERE id = ?', [(string) ($result['transaction_id'] ?? '')]);
+                $beneficiary = (string) ($result['destination_summary'] ?? '');
+                $templateKey = $kind === 'bill' ? 'bill_payment' : 'bank_transfer';
+                $placeholder = $kind === 'bill' ? 'biller' : 'beneficiary';
+                $rendered = $emailTemplates->render($templateKey, [
+                    'first_name' => (string) ($user['first_name'] ?? ''),
+                    'amount' => wayfairs_major((int) $result['amount_minor'], (int) $asset['scale']),
+                    'currency' => (string) $asset['code'],
+                    'reference' => (string) ($transaction['public_reference'] ?? $result['id']),
+                    $placeholder => $beneficiary,
+                ]);
+                if ($rendered !== null) {
+                    $mailer->send((string) $user['email'], $rendered['subject'], $rendered['body']);
+                }
+            }
             Flash::put('success', $kind === 'bill' ? 'Bill payment submitted. Funds are held while it is processed.' : 'Bank transfer submitted. Funds are held while it is processed.');
             $transactionId = (string) ($result['transaction_id'] ?? '');
             if ($transactionId !== '') {
@@ -445,22 +492,66 @@ return function (Router $router, Database $database): void {
         ]);
     }, 'auth');
 
-    $router->post('/flights', static function (Request $request) use ($flights, $attempt): never {
+    $router->post('/flights', static function (Request $request) use ($flights, $database, $attempt, $mailer, $emailTemplates): never {
         $user = Context::user() ?? [];
-        $attempt(static fn () => $flights->create((string) $user['id'], [
-            'origin' => $request->post('origin', ''),
-            'destination' => $request->post('destination', ''),
-            'departure_date' => $request->post('departure_date', ''),
-            'return_date' => $request->post('return_date', ''),
-            'travellers' => $request->post('travellers', ''),
-            'cabin' => $request->post('cabin', ''),
-            'notes' => $request->post('notes', ''),
-        ], (string) $request->post('idem', '')), 'Flight request sent. We will contact you to confirm availability and price.', '/flights');
+        $attempt(static function () use ($flights, $mailer, $emailTemplates, $user, $request): void {
+            $result = $flights->create((string) $user['id'], [
+                'origin' => $request->post('origin', ''),
+                'destination' => $request->post('destination', ''),
+                'departure_date' => $request->post('departure_date', ''),
+                'return_date' => $request->post('return_date', ''),
+                'travellers' => $request->post('travellers', ''),
+                'cabin' => $request->post('cabin', ''),
+                'notes' => $request->post('notes', ''),
+            ], (string) $request->post('idem', ''));
+            if (!Context::isImpersonating() && $mailer->isConfigured()) {
+                $rendered = $emailTemplates->render('flight_request', [
+                    'first_name' => (string) ($user['first_name'] ?? ''),
+                    'origin' => (string) $request->post('origin', ''),
+                    'destination' => (string) $request->post('destination', ''),
+                ]);
+                if ($rendered !== null) {
+                    $mailer->send((string) $user['email'], $rendered['subject'], $rendered['body']);
+                }
+            }
+        }, 'Flight request sent. We will contact you to confirm availability and price.', '/flights');
     }, 'auth', true);
 
-    $router->post('/transfer/internal', static function (Request $request) use ($banking, $attempt): never {
+    $router->post('/transfer/internal', static function (Request $request) use ($banking, $database, $attempt, $mailer, $emailTemplates): never {
         $user = Context::user() ?? [];
-        $attempt(static fn () => $banking->internalTransfer((string) $user['id'], (string) $request->post('recipient_email', ''), (string) $request->post('asset_code', ''), (string) $request->post('amount', ''), (string) $request->post('remark', ''), (string) $request->post('idem', '')), 'Internal transfer completed.', '/transfer');
+        $attempt(static function () use ($banking, $database, $mailer, $emailTemplates, $user, $request): void {
+            $result = $banking->internalTransfer((string) $user['id'], (string) $request->post('recipient_email', ''), (string) $request->post('asset_code', ''), (string) $request->post('amount', ''), (string) $request->post('remark', ''), (string) $request->post('idem', ''));
+            if (Context::isImpersonating() || !$mailer->isConfigured()) {
+                return;
+            }
+            $asset = $banking->assetByCode((string) $request->post('asset_code', ''));
+            $amount = wayfairs_major((int) $result['amount_minor'], (int) $asset['scale']);
+            $recipient = $database->fetchOne('SELECT id, first_name, email FROM users WHERE email_normalized = ?', [mb_strtolower(trim((string) $request->post('recipient_email', '')), 'UTF-8')]);
+            // Sender: debit email
+            $rendered = $emailTemplates->render('debit', [
+                'first_name' => (string) ($user['first_name'] ?? ''),
+                'amount' => $amount,
+                'currency' => (string) $asset['code'],
+                'reference' => (string) ($result['public_reference'] ?? ''),
+                'date' => gmdate('Y-m-d H:i'),
+            ]);
+            if ($rendered !== null) {
+                $mailer->send((string) $user['email'], $rendered['subject'], $rendered['body']);
+            }
+            // Recipient: top-up email
+            if ($recipient) {
+                $rendered = $emailTemplates->render('topup', [
+                    'first_name' => (string) ($recipient['first_name'] ?? ''),
+                    'amount' => $amount,
+                    'currency' => (string) $asset['code'],
+                    'reference' => (string) ($result['public_reference'] ?? ''),
+                    'date' => gmdate('Y-m-d H:i'),
+                ]);
+                if ($rendered !== null) {
+                    $mailer->send((string) $recipient['email'], $rendered['subject'], $rendered['body']);
+                }
+            }
+        }, 'Internal transfer completed.', '/transfer');
     }, 'auth', true);
 
     $router->get('/invoices', static function () use ($page, $banking, $ledger, $accountRows, $me, $database, $kyc, $rates): void {
@@ -618,20 +709,30 @@ return function (Router $router, Database $database): void {
         }, 'Customer profile updated.', '/admin/users/' . $userId);
     }, 'admin', true);
 
-    $router->post('/admin/users/{id}/accounts/{accountId}/status', static function (Request $request) use ($auth, $audit, $attempt): never {
+    $router->post('/admin/users/{id}/accounts/{accountId}/status', static function (Request $request) use ($auth, $audit, $attempt, $database, $mailer, $emailTemplates): never {
         $userId = (string) $request->route('id');
         $accountId = (string) $request->route('accountId');
-        $attempt(static function () use ($auth, $audit, $request, $userId, $accountId): void {
+        $attempt(static function () use ($auth, $audit, $request, $userId, $accountId, $database, $mailer, $emailTemplates): void {
             $status = (string) $request->post('status', '');
             $remark = trim((string) $request->post('admin_remark', ''));
             $change = $auth->updateCustomerAccountStatus($userId, $accountId, $status);
             $audit->record('account.status_updated', 'account', $accountId, $remark ?: null, $change + ['user_id' => $userId]);
+            if ($mailer->isConfigured() && in_array($status, ['restricted', 'frozen', 'closed'], true)) {
+                $customer = $database->fetchOne('SELECT first_name, email FROM users WHERE id = ?', [$userId]);
+                $rendered = $emailTemplates->render('account_status', [
+                    'first_name' => (string) ($customer['first_name'] ?? ''),
+                    'status' => ucwords(str_replace('_', ' ', $status)),
+                ]);
+                if ($rendered !== null && $customer) {
+                    $mailer->send((string) $customer['email'], $rendered['subject'], $rendered['body']);
+                }
+            }
         }, 'Currency account status updated.', '/admin/users/' . $userId);
     }, 'admin', true);
 
-    $router->post('/admin/users/{id}/adjust', static function (Request $request) use ($banking, $audit, $attempt): never {
+    $router->post('/admin/users/{id}/adjust', static function (Request $request) use ($banking, $database, $audit, $attempt, $mailer, $emailTemplates): never {
         $userId = (string) $request->route('id');
-        $attempt(static function () use ($banking, $audit, $request, $userId): void {
+        $attempt(static function () use ($banking, $database, $audit, $mailer, $emailTemplates, $request, $userId): void {
             $direction = (string) $request->post('direction', '');
             $remark = trim((string) $request->post('remark', ''));
             $transaction = $banking->adminAdjustBalance(
@@ -644,6 +745,21 @@ return function (Router $router, Database $database): void {
                 (string) $request->post('idem', '')
             );
             $audit->record('account.adjusted', 'transaction', (string) $transaction['id'], $remark, ['direction' => $direction, 'user_id' => $userId, 'public_reference' => $transaction['public_reference']]);
+            if ($mailer->isConfigured()) {
+                $customer = $database->fetchOne('SELECT first_name, email FROM users WHERE id = ?', [$userId]);
+                $account = $database->fetchOne('SELECT code, scale, symbol FROM assets WHERE id = (SELECT asset_id FROM accounts WHERE id = ?)', [(string) $request->post('account_id', '')]);
+                $templateKey = $direction === 'credit' ? 'topup' : 'debit';
+                $rendered = $emailTemplates->render($templateKey, [
+                    'first_name' => (string) ($customer['first_name'] ?? ''),
+                    'amount' => wayfairs_major((int) $transaction['amount_minor'], (int) ($account['scale'] ?? 2)),
+                    'currency' => (string) ($account['code'] ?? ''),
+                    'reference' => (string) ($transaction['public_reference'] ?? ''),
+                    'date' => gmdate('Y-m-d H:i'),
+                ]);
+                if ($rendered !== null && $customer) {
+                    $mailer->send((string) $customer['email'], $rendered['subject'], $rendered['body']);
+                }
+            }
         }, 'Customer balance adjustment completed.', '/admin/users/' . $userId);
     }, 'admin', true);
 
