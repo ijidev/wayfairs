@@ -53,7 +53,8 @@ final class Mailer
         $password = (string) $get('smtp.password', '');
         if ($password !== '' && str_starts_with($password, 'enc:')) {
             try {
-                $password = Security::decrypt(substr($password, 4), (string) Config::instance()->get('app_key', ''));
+                $decrypted = Security::decrypt(substr($password, 4), (string) Config::instance()->get('app_key', ''));
+                $password = is_array($decrypted) ? (string) ($decrypted['v'] ?? '') : (string) $decrypted;
             } catch (RuntimeException) {
                 $password = '';
             }
@@ -74,7 +75,8 @@ final class Mailer
         $host = $config['host'];
         $port = $config['port'] > 0 ? $config['port'] : 587;
         $encryption = $config['encryption'];
-        $verifyPeer = (string) $this->database->fetchOne("SELECT setting_value FROM site_settings WHERE setting_key = 'smtp.verify_peer'")['setting_value'] ?? '1';
+        $verifyRow = $this->database->fetchOne("SELECT setting_value FROM site_settings WHERE setting_key = 'smtp.verify_peer'");
+        $verifyPeer = (string) ($verifyRow['setting_value'] ?? '1');
         $verifyPeer = $verifyPeer !== '0';
         $sslOptions = [
             'verify_peer' => $verifyPeer,

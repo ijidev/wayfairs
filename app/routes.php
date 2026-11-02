@@ -816,8 +816,9 @@ return function (Router $router, Database $database): void {
         $admin('admin/smtp', ['values' => $values, 'mailer' => $mailer]);
     }, 'admin');
 
-    $router->post('/admin/smtp', static function (Request $request) use ($settings, $mailer, $audit, $attempt): never {
-        $attempt(static function () use ($settings, $mailer, $audit, $request): void {
+    $router->post('/admin/smtp', static function (Request $request) use ($database, $mailer, $audit, $attempt): never {
+        $attempt(static function () use ($database, $mailer, $audit, $request): void {
+            $settings = new SiteSettings($database);
             $keys = ['smtp.host', 'smtp.port', 'smtp.username', 'smtp.password', 'smtp.encryption', 'smtp.from_email', 'smtp.from_name', 'smtp.verify_peer'];
             $values = [];
             foreach ($keys as $key) {
