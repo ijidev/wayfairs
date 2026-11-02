@@ -810,7 +810,7 @@ return function (Router $router, Database $database): void {
     $router->get('/admin/smtp', static function () use ($admin, $database, $mailer): void {
         $settings = new SiteSettings($database);
         $values = [];
-        foreach (['smtp.host', 'smtp.port', 'smtp.username', 'smtp.encryption', 'smtp.from_email', 'smtp.from_name'] as $key) {
+        foreach (['smtp.host', 'smtp.port', 'smtp.username', 'smtp.encryption', 'smtp.from_email', 'smtp.from_name', 'smtp.verify_peer'] as $key) {
             $values[$key] = $settings->get($key, '');
         }
         $admin('admin/smtp', ['values' => $values, 'mailer' => $mailer]);
@@ -818,7 +818,7 @@ return function (Router $router, Database $database): void {
 
     $router->post('/admin/smtp', static function (Request $request) use ($settings, $mailer, $audit, $attempt): never {
         $attempt(static function () use ($settings, $mailer, $audit, $request): void {
-            $keys = ['smtp.host', 'smtp.port', 'smtp.username', 'smtp.password', 'smtp.encryption', 'smtp.from_email', 'smtp.from_name'];
+            $keys = ['smtp.host', 'smtp.port', 'smtp.username', 'smtp.password', 'smtp.encryption', 'smtp.from_email', 'smtp.from_name', 'smtp.verify_peer'];
             $values = [];
             foreach ($keys as $key) {
                 $postKey = str_replace('.', '_', $key);
@@ -828,6 +828,9 @@ return function (Router $router, Database $database): void {
                 }
                 if ($key === 'smtp.encryption' && !in_array($value, ['none', 'tls', 'ssl'], true)) {
                     $value = 'tls';
+                }
+                if ($key === 'smtp.verify_peer') {
+                    $value = $request->post('smtp_verify_peer') === '1' ? '1' : '0';
                 }
                 if ($key === 'smtp.from_email' && $value !== '' && !filter_var($value, FILTER_VALIDATE_EMAIL)) {
                     throw new RuntimeException('Enter a valid from email address.');

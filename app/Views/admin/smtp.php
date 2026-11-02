@@ -31,6 +31,7 @@ $encryption = (string) ($values['smtp.encryption'] ?? 'tls');
         <label>From email<input type="email" name="smtp_from_email" value="<?= e((string) ($values['smtp.from_email'] ?? '')) ?>" /></label>
       </div>
       <label>From name<input name="smtp_from_name" value="<?= e((string) ($values['smtp.from_name'] ?? 'Wayfairs')) ?>" /></label>
+      <label class="inline-check"><input type="checkbox" name="smtp_verify_peer" value="1" <?= ($values['smtp.verify_peer'] ?? '1') !== '0' ? 'checked' : '' ?> /> Verify the server certificate (turn off only for self-signed servers)</label>
     </div>
   </section>
   <div class="form-actions"><button class="btn" type="submit">Save SMTP settings</button></div>

@@ -74,18 +74,31 @@ final class Mailer
         $host = $config['host'];
         $port = $config['port'] > 0 ? $config['port'] : 587;
         $encryption = $config['encryption'];
-        $remote = ($encryption === 'ssl' ? 'ssl://' : '') . $host . ':' . $port;
-        $socket = @fsockopen($remote, $port, $errno, $errstr, 15);
+        $verifyPeer = (string) $this->database->fetchOne("SELECT setting_value FROM site_settings WHERE setting_key = 'smtp.verify_peer'")['setting_value'] ?? '1';
+        $verifyPeer = $verifyPeer !== '0';
+        $sslOptions = [
+            'verify_peer' => $verifyPeer,
+            'verify_peer_name' => $verifyPeer,
+            'allow_self_signed' => !$verifyPeer,
+            'SNI_enabled' => true,
+            'peer_name' => $host,
+        ];
+        $context = stream_context_create(['ssl' => $sslOptions]);
+        $remote = ($encryption === 'ssl' ? 'ssl://' : '') . $host;
+        $socket = @stream_socket_client($remote . ':' . $port, $errno, $errstr, 15, STREAM_CLIENT_CONNECT, $context);
         if (!is_resource($socket)) {
-            throw new RuntimeException('Could not connect to the SMTP server: ' . $errstr);
+            throw new RuntimeException('Could not connect to the SMTP server: ' . $errstr . ' (' . $errno . ')');
         }
         stream_set_timeout($socket, 15);
         $this->expect($socket, 220);
         $this->command($socket, 'EHLO wayfairs', 250);
         if ($encryption === 'tls') {
             $this->command($socket, 'STARTTLS', 220);
-            if (!stream_socket_enable_crypto($socket, true, STREAM_CRYPTO_METHOD_TLS_CLIENT)) {
-                throw new RuntimeException('STARTTLS failed.');
+            $cryptoMethod = STREAM_CRYPTO_METHOD_TLS_CLIENT;
+            if (!@stream_socket_enable_crypto($socket, true, $cryptoMethod)) {
+                $last = error_get_last();
+                $detail = is_array($last) ? ($last['message'] ?? '') : '';
+                throw new RuntimeException('STARTTLS failed.' . ($detail !== '' ? ' ' . $detail : ''));
             }
             $this->command($socket, 'EHLO wayfairs', 250);
         }
