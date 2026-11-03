@@ -37,9 +37,22 @@ $rejectedCount = count(array_filter($transfers, static fn (array $transfer): boo
   </section>
 <?php endif; ?>
 
-<section class="card table-card static">
+<section class="card static">
   <div class="panel-head"><div><h2>Settlement history</h2><p>Closed beneficiary-transfer requests, newest first.</p></div><span class="pill"><?= count($closedTransfers) ?> loaded</span></div>
   <?php if ($closedTransfers === []): ?><div class="empty-state"><div class="empty-icon"><?= wayfairs_icon('receipt') ?></div><h3>No closed bank transfers</h3><p>Sent and rejected requests will appear here.</p></div><?php else: ?>
-  <div class="table-wrap"><table><thead><tr><th>Submitted</th><th>Customer</th><th>Amount</th><th>USD equivalent</th><th>Beneficiary</th><th>Status</th><th>Reference / remark</th></tr></thead><tbody><?php foreach ($closedTransfers as $transfer): $rate = $usdRates[$transfer['asset_code']] ?? null; ?><tr><td><?= e(wayfairs_datetime((string) $transfer['created_at'])) ?></td><td><a class="cell-title" href="<?= e(wayfairs_url('/admin/users/' . $transfer['user_id'])) ?>"><?= e(trim((string) $transfer['first_name'] . ' ' . (string) $transfer['last_name'])) ?></a><span class="cell-subtitle"><?= e((string) $transfer['email']) ?></span></td><td class="cell-amount"><?= e(wayfairs_amount((int) $transfer['amount_minor'], (int) $transfer['asset_scale'], (string) $transfer['asset_symbol'], (string) $transfer['asset_code'])) ?></td><td><?= e(wayfairs_usd_equivalent((int) $transfer['amount_minor'], (int) $transfer['asset_scale'], $rate)) ?></td><td class="wrap-anywhere"><?= e((string) $transfer['destination_summary']) ?></td><td><?= wayfairs_pill((string) $transfer['status']) ?></td><td><span class="cell-title"><?= e(trim((string) ($transfer['external_reference'] ?? '')) !== '' ? (string) $transfer['external_reference'] : '—') ?></span><span class="cell-subtitle"><?= e(trim((string) ($transfer['review_reason'] ?? '')) !== '' ? (string) $transfer['review_reason'] : 'No remark') ?></span></td></tr><?php endforeach; ?></tbody></table></div>
+  <ul class="tx-list">
+  <?php foreach ($closedTransfers as $transfer): $rate = $usdRates[$transfer['asset_code']] ?? null; ?>
+    <li>
+      <div class="tx-row">
+        <span class="tx-row-icon debit"><?= wayfairs_icon('transfer') ?></span>
+        <span class="tx-row-main">
+          <span class="tx-row-top"><strong class="tx-row-title"><?= e(trim((string) $transfer['first_name'] . ' ' . (string) $transfer['last_name'])) ?> · <?= e((string) $transfer['destination_summary']) ?></strong><span class="tx-row-amount amount-negative"><?= e('−' . wayfairs_amount((int) $transfer['amount_minor'], (int) $transfer['asset_scale'], (string) $transfer['asset_symbol'], (string) $transfer['asset_code'])) ?></span></span>
+          <span class="tx-row-meta"><?= e((string) $transfer['email']) ?> · <?= e(wayfairs_datetime((string) $transfer['created_at'])) ?> · <?= e(wayfairs_usd_equivalent((int) $transfer['amount_minor'], (int) $transfer['asset_scale'], $rate)) ?></span>
+          <span class="tx-row-bottom"><?= wayfairs_pill((string) $transfer['status']) ?><span class="tx-row-ref"><?= e(trim((string) ($transfer['external_reference'] ?? '')) !== '' ? (string) $transfer['external_reference'] : '—') ?><?= trim((string) ($transfer['review_reason'] ?? '')) !== '' ? ' · ' . e((string) $transfer['review_reason']) : '' ?></span></span>
+        </span>
+      </div>
+    </li>
+  <?php endforeach; ?>
+  </ul>
   <?php endif; ?>
 </section>

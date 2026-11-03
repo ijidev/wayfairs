@@ -164,14 +164,25 @@ if (!array_key_exists($activePanel, $panels)) {
 <?php endif; ?>
 
 <?php if ($activePanel === 'history'): ?>
-<section class="card table-card static">
+<section class="card static">
   <div class="panel-head"><div><h2>Bank transfer history</h2><p>Your bank transfers, their current status, and an estimated USD value.</p></div><span class="pill"><?= count($bankTransfers) ?> loaded</span></div>
   <?php if ($bankTransfers === []): ?>
     <div class="empty-state"><div class="empty-icon"><?= wayfairs_icon('building') ?></div><h3>No bank transfers</h3><p>Submitted beneficiary transfers will appear here.</p></div>
   <?php else: ?>
-    <div class="table-wrap"><table><thead><tr><th>Submitted</th><th>From</th><th>Amount</th><th>USD equivalent</th><th>Beneficiary</th><th>Remark</th><th>Status</th></tr></thead><tbody>
-    <?php foreach ($bankTransfers as $transfer): $rate = $usdRates[$transfer['asset_code']] ?? null; ?><tr><td><?= e(wayfairs_datetime((string) $transfer['created_at'])) ?></td><td><span class="cell-title"><?= e((string) $transfer['asset_code']) ?></span><span class="cell-subtitle"><?= e((string) $transfer['account_number']) ?></span></td><td class="cell-amount"><?= e(wayfairs_amount((int) $transfer['amount_minor'], (int) $transfer['asset_scale'], (string) $transfer['asset_symbol'], (string) $transfer['asset_code'])) ?></td><td><span class="cell-title"><?= e(wayfairs_usd_equivalent((int) $transfer['amount_minor'], (int) $transfer['asset_scale'], $rate)) ?></span><span class="cell-subtitle"><?= e(wayfairs_rate_disclosure($rate)) ?></span></td><td class="wrap-anywhere"><?= e((string) $transfer['destination_summary']) ?></td><td><?= e(trim((string) ($transfer['user_remark'] ?? '')) !== '' ? (string) $transfer['user_remark'] : '—') ?></td><td><?= wayfairs_pill((string) $transfer['status']) ?></td></tr><?php endforeach; ?>
-    </tbody></table></div>
+    <ul class="tx-list">
+    <?php foreach ($bankTransfers as $transfer): $rate = $usdRates[$transfer['asset_code']] ?? null; ?>
+      <li>
+        <div class="tx-row">
+          <span class="tx-row-icon debit"><?= wayfairs_icon('transfer') ?></span>
+          <span class="tx-row-main">
+            <span class="tx-row-top"><strong class="tx-row-title"><?= e((string) $transfer['destination_summary']) ?></strong><span class="tx-row-amount amount-negative"><?= e('−' . wayfairs_amount((int) $transfer['amount_minor'], (int) $transfer['asset_scale'], (string) $transfer['asset_symbol'], (string) $transfer['asset_code'])) ?></span></span>
+            <span class="tx-row-meta"><?= e((string) $transfer['asset_code']) ?> · <?= e(wayfairs_datetime((string) $transfer['created_at'])) ?> · <?= e(wayfairs_usd_equivalent((int) $transfer['amount_minor'], (int) $transfer['asset_scale'], $rate)) ?></span>
+            <span class="tx-row-bottom"><?= wayfairs_pill((string) $transfer['status']) ?><span class="tx-row-ref"><?= e(trim((string) ($transfer['user_remark'] ?? '')) !== '' ? (string) $transfer['user_remark'] : '—') ?></span></span>
+          </span>
+        </div>
+      </li>
+    <?php endforeach; ?>
+    </ul>
   <?php endif; ?>
 </section>
 <?php endif; ?>
@@ -188,3 +199,79 @@ if (!array_key_exists($activePanel, $panels)) {
   <?php endif; ?>
 </section>
 <?php endif; ?>
+
+
+<script>
+(function () {
+  var form = document.getElementById('bank-transfer-form');
+  if (!form) return;
+  var verified = <?= $verified ? 'true' : 'false' ?>;
+  var routes = form.querySelectorAll('input[name="transfer_route"]');
+  var groups = form.querySelectorAll('[data-route-group]');
+  function selectedRoute() {
+    var route = 'iban';
+    routes.forEach(function (radio) { if (radio.checked) route = radio.value; });
+    return route;
+  }
+  function syncRoute() {
+    var route = selectedRoute();
+    groups.forEach(function (group) {
+      var active = group.getAttribute('data-route-group') === route;
+      group.hidden = !active;
+      group.querySelectorAll('input').forEach(function (input) {
+        input.disabled = !active || !verified;
+        input.required = active && verified && (route === 'iban' ? input.name === 'iban' : input.name === 'account_number');
+        if (!active) input.value = '';
+      });
+    });
+  }
+  routes.forEach(function (radio) { radio.addEventListener('change', syncRoute); });
+  syncRoute();
+
+  var select = document.getElementById('transfer-asset');
+  var available = document.getElementById('transfer-available');
+  var usd = document.getElementById('transfer-usd');
+  var fee = document.getElementById('transfer-fee');
+  if (select) {
+    var sync = function () { var option = select.options[select.selectedIndex]; if (!option) return; if (available) available.textContent = option.getAttribute('data-available') || '—'; if (usd) usd.textContent = option.getAttribute('data-usd') || '—'; if (fee) fee.textContent = option.getAttribute('data-fee') || '—'; };
+    select.addEventListener('change', sync); sync();
+  }
+
+  var notice = document.getElementById('beneficiary-match');
+  var timer = null;
+  var lastKey = '';
+  function setField(id, value) { var field = document.getElementById(id); if (field && value) field.value = value; }
+  function lookup() {
+    var route = selectedRoute();
+    var input = form.querySelector(route === 'iban' ? '#transfer-iban' : '#transfer-account');
+    var identifier = input ? input.value.replace(/[^A-Za-z0-9]/g, '') : '';
+    var key = route + ':' + identifier;
+    if (identifier.length < 6 || key === lastKey) return;
+    lastKey = key;
+    fetch('' + <?= json_encode(wayfairs_url('/transfer/beneficiary')) ?> + '?route=' + encodeURIComponent(route) + '&identifier=' + encodeURIComponent(identifier), { credentials: 'same-origin', headers: { 'Accept': 'application/json' } })
+      .then(function (response) { return response.json(); })
+      .then(function (data) {
+        if (!notice) return;
+        if (!data.found || !data.beneficiary) { notice.hidden = true; return; }
+        var b = data.beneficiary;
+        setField('transfer-beneficiary-name', b.beneficiary_name);
+        setField('transfer-beneficiary-address', b.beneficiary_address);
+        setField('transfer-bank-name', b.bank_name);
+        setField('transfer-bank-address', b.bank_address);
+        setField('transfer-swift', b.swift_bic);
+        setField('transfer-routing', b.routing_code);
+        var country = document.getElementById('transfer-country');
+        if (country && b.country_code) country.value = b.country_code;
+        notice.textContent = 'Filled in from a saved beneficiary: ' + b.nickname + '. Check the details before you review.';
+        notice.hidden = false;
+      })
+      .catch(function () {});
+  }
+  ['transfer-iban', 'transfer-account'].forEach(function (id) {
+    var field = document.getElementById(id);
+    if (!field) return;
+    field.addEventListener('input', function () { clearTimeout(timer); timer = setTimeout(lookup, 400); });
+    field.addEventListener('change', lookup);
+  });
+})();
+</script>

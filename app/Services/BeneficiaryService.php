@@ -66,7 +66,7 @@ final class BeneficiaryService
         return array_map(
             fn (array $row): array => $this->summary($row),
             $this->database->fetchAll(
-                "SELECT * FROM saved_beneficiaries WHERE status = 'active' AND owner_key IN (?, 'global') ORDER BY scope ASC, nickname ASC LIMIT 200",
+                "SELECT * FROM saved_beneficiaries WHERE status = 'active' AND scope = 'user' AND owner_key = ? ORDER BY nickname ASC LIMIT 200",
                 [$userId]
             )
         );
