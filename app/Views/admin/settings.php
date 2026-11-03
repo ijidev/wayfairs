@@ -6,19 +6,10 @@ declare(strict_types=1);
   <div class="page-heading"><span class="page-icon"><?= wayfairs_icon('settings') ?></span><div class="page-heading-copy"><span class="page-kicker">Public configuration</span><h1>Settings</h1><p>Manage the brand, support details, and customer-facing notices stored by Wayfairs.</p></div></div>
 </header>
 
-<?php require WAYFAIRS_ROOT . '/app/Views/partials/settings-tabs.php'; ?>
 
 <?php $missingExtensions = $missingExtensions ?? []; $canEnable = $missingExtensions === []; $bankTransfersEnabled = (bool) ($bankTransfersEnabled ?? false); ?>
 
 <div class="settings-layout">
-  <nav class="settings-sidemenu" aria-label="Settings sections">
-    <button type="button" class="settings-side-link active" data-section="payments">Payments</button>
-    <button type="button" class="settings-side-link" data-section="brand">Brand</button>
-    <button type="button" class="settings-side-link" data-section="support">Support</button>
-    <button type="button" class="settings-side-link" data-section="notices">Notices</button>
-    <button type="button" class="settings-side-link" data-section="chat">Live chat</button>
-    <button type="button" class="settings-side-link" data-section="trading">Trading</button>
-  </nav>
 
   <div class="settings-content">
     <div class="settings-section-panel" data-section="payments">
@@ -42,6 +33,8 @@ declare(strict_types=1);
       </section>
     </div>
 
+  <form class="settings-form" method="post" action="<?= e(wayfairs_url('/admin/settings')) ?>">
+    <input type="hidden" name="_token" value="<?= e(wayfairs_csrf()) ?>" />
     <div class="settings-section-panel" data-section="brand" hidden>
       <section class="card settings-section static">
         <div class="settings-section-copy"><span class="page-icon"><?= wayfairs_icon('building') ?></span><h2 id="brand">Brand identity</h2><p>The name, tagline, and colours used throughout public and authenticated pages.</p></div>
@@ -96,17 +89,21 @@ declare(strict_types=1);
 
     <div class="receipt-footnote"><?= wayfairs_icon('audit') ?><span>Saving creates an administrative audit event listing the updated setting keys.</span></div>
     <div class="form-actions"><button class="btn" type="submit">Save site information</button></div>
+  </form>
   </div>
 </div>
 
 <script>
 (function () {
-  var links = document.querySelectorAll('.settings-side-link');
   var panels = document.querySelectorAll('.settings-section-panel');
+  var links = document.querySelectorAll('[data-settings-link]');
   function show(name) {
-    links.forEach(function (l) { var active = l.getAttribute('data-section') === name; l.classList.toggle('active', active); });
+    if (!name) name = 'payments';
     panels.forEach(function (p) { p.hidden = p.getAttribute('data-section') !== name; });
+    links.forEach(function (l) { l.classList.toggle('active', l.getAttribute('data-settings-link') === name); });
   }
-  links.forEach(function (l) { l.addEventListener('click', function () { show(l.getAttribute('data-section')); }); });
+  function fromHash() { show(window.location.hash.replace('#', '')); }
+  window.addEventListener('hashchange', fromHash);
+  fromHash();
 })();
 </script>

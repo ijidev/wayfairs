@@ -57,15 +57,15 @@ $footerMode = 'compact';
       <nav class="side-nav" aria-label="Administration navigation">
         <?php foreach ($links as $link): ?>
           <?php if ($link['path'] === '/admin/settings'): ?>
-            <details class="nav-dropdown" <?= wayfairs_nav_active('/admin/settings') || in_array(wayfairs_current_path(), ['/admin/assets','/admin/beneficiaries','/admin/flights','/admin/otp','/admin/smtp','/admin/email-templates'], true) ? 'open' : '' ?>>
+            <details class="nav-dropdown" open>
               <summary class="side-link<?= wayfairs_nav_active($link['path']) ? ' active' : '' ?>"><?= wayfairs_icon($link['icon']) ?><span><?= e($link['label']) ?></span><span class="nav-caret"><?= wayfairs_icon('arrow-right') ?></span></summary>
               <div class="nav-sub">
-                <a class="side-link sub" href="<?= e(wayfairs_url('/admin/settings#payments')) ?>">Payments</a>
-                <a class="side-link sub" href="<?= e(wayfairs_url('/admin/settings#brand')) ?>">Brand</a>
-                <a class="side-link sub" href="<?= e(wayfairs_url('/admin/settings#support')) ?>">Support</a>
-                <a class="side-link sub" href="<?= e(wayfairs_url('/admin/settings#notices')) ?>">Notices</a>
-                <a class="side-link sub" href="<?= e(wayfairs_url('/admin/settings#chat')) ?>">Live chat</a>
-                <a class="side-link sub" href="<?= e(wayfairs_url('/admin/settings#trading')) ?>">Trading</a>
+                <a class="side-link sub" data-settings-link="payments" href="<?= e(wayfairs_url('/admin/settings#payments')) ?>">Payments</a>
+                <a class="side-link sub" data-settings-link="brand" href="<?= e(wayfairs_url('/admin/settings#brand')) ?>">Brand</a>
+                <a class="side-link sub" data-settings-link="support" href="<?= e(wayfairs_url('/admin/settings#support')) ?>">Support</a>
+                <a class="side-link sub" data-settings-link="notices" href="<?= e(wayfairs_url('/admin/settings#notices')) ?>">Notices</a>
+                <a class="side-link sub" data-settings-link="chat" href="<?= e(wayfairs_url('/admin/settings#chat')) ?>">Live chat</a>
+                <a class="side-link sub" data-settings-link="trading" href="<?= e(wayfairs_url('/admin/settings#trading')) ?>">Trading</a>
               </div>
             </details>
           <?php else: ?>

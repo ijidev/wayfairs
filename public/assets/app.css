@@ -655,3 +655,9 @@ body.app-shell{
   .acct-facts{grid-template-columns:1fr 1fr}
   .acct-access{grid-template-columns:1fr}
 }
+
+/* Balance card: keep content inside the card; bottom row sits at the bottom edge */
+.bank-balance-card{aspect-ratio:auto;min-height:260px;max-height:none;justify-content:flex-start;gap:1.1rem;padding:1.5rem 1.6rem}
+.bank-card-balance{margin-top:.5rem}
+.bank-card-bottom{margin-top:auto;padding-top:.5rem;align-items:flex-end}
+@media (max-width:640px){.bank-balance-card{min-height:230px;padding:1.2rem 1.25rem;gap:.9rem}.bank-card-balance{margin-top:.25rem}}
