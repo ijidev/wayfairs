@@ -23,7 +23,7 @@ declare(strict_types=1);
   <div class="settings-content">
     <div class="settings-section-panel" data-section="payments">
       <section class="card settings-section static">
-        <div class="settings-section-copy"><span class="page-icon"><?= wayfairs_icon('transfer') ?></span><h2>Payments</h2><p>Bank transfers and bill payments send money to outside bank accounts. Turn them on once this server is ready.</p></div>
+        <div class="settings-section-copy"><span class="page-icon"><?= wayfairs_icon('transfer') ?></span><h2 id="payments">Payments</h2><p>Bank transfers and bill payments send money to outside bank accounts. Turn them on once this server is ready.</p></div>
         <div class="settings-fields">
           <div class="summary-line"><small>Bank transfers and bill payments</small><?= wayfairs_pill($bankTransfersEnabled ? 'enabled' : 'disabled') ?></div>
           <?php if (!$canEnable): ?>
@@ -44,7 +44,7 @@ declare(strict_types=1);
 
     <div class="settings-section-panel" data-section="brand" hidden>
       <section class="card settings-section static">
-        <div class="settings-section-copy"><span class="page-icon"><?= wayfairs_icon('building') ?></span><h2>Brand identity</h2><p>The name, tagline, and colours used throughout public and authenticated pages.</p></div>
+        <div class="settings-section-copy"><span class="page-icon"><?= wayfairs_icon('building') ?></span><h2 id="brand">Brand identity</h2><p>The name, tagline, and colours used throughout public and authenticated pages.</p></div>
         <div class="settings-fields">
           <div class="form-grid"><label>Bank name<input name="site_name" value="<?= e($values['site.name'] ?? 'Wayfairs') ?>" required maxlength="120" /></label><label>Tagline<input name="site_tagline" value="<?= e($values['site.tagline'] ?? '') ?>" maxlength="200" /></label></div>
           <div class="form-grid"><label>Primary colour<input name="site_primary_color" value="<?= e($values['site.primary_color'] ?? '#0f8b6d') ?>" pattern="#[0-9a-fA-F]{6}" placeholder="#0f8b6d" /></label><label>Accent colour<input name="site_accent_color" value="<?= e($values['site.accent_color'] ?? '#f0b429') ?>" pattern="#[0-9a-fA-F]{6}" placeholder="#f0b429" /></label></div>
@@ -55,14 +55,14 @@ declare(strict_types=1);
 
     <div class="settings-section-panel" data-section="support" hidden>
       <section class="card settings-section static">
-        <div class="settings-section-copy"><span class="page-icon"><?= wayfairs_icon('support') ?></span><h2>Support contact</h2><p>Public support channels displayed in the sidebar and footer.</p></div>
+        <div class="settings-section-copy"><span class="page-icon"><?= wayfairs_icon('support') ?></span><h2 id="support">Support contact</h2><p>Public support channels displayed in the sidebar and footer.</p></div>
         <div class="settings-fields"><div class="form-grid"><label>Support email<input type="email" name="site_support_email" value="<?= e($values['site.support_email'] ?? '') ?>" /></label><label>Support phone<input name="site_support_phone" value="<?= e($values['site.support_phone'] ?? '') ?>" maxlength="40" /></label></div><label>Registered or support address<textarea name="site_address" rows="3" maxlength="1000"><?= e($values['site.address'] ?? '') ?></textarea></label></div>
       </section>
     </div>
 
     <div class="settings-section-panel" data-section="notices" hidden>
       <section class="card settings-section static">
-        <div class="settings-section-copy"><span class="page-icon"><?= wayfairs_icon('info') ?></span><h2>Customer notices</h2><p>Operational wording shown around deposits, withdrawals, verification, and the public footer.</p></div>
+        <div class="settings-section-copy"><span class="page-icon"><?= wayfairs_icon('info') ?></span><h2 id="notices">Customer notices</h2><p>Operational wording shown around deposits, withdrawals, verification, and the public footer.</p></div>
         <div class="settings-fields">
           <label>Default fiat deposit instructions<textarea name="site_deposit_instructions_fiat" rows="3" maxlength="1000"><?= e($values['site.deposit_instructions_fiat'] ?? '') ?></textarea><span class="field-hint">Used when a fiat asset does not have its own instructions.</span></label>
           <label>Default crypto deposit instructions<textarea name="site_deposit_instructions_crypto" rows="3" maxlength="1000"><?= e($values['site.deposit_instructions_crypto'] ?? '') ?></textarea><span class="field-hint">Used when a crypto asset does not have its own instructions.</span></label>
@@ -75,7 +75,7 @@ declare(strict_types=1);
 
     <div class="settings-section-panel" data-section="chat" hidden>
       <section class="card settings-section static">
-        <div class="settings-section-copy"><span class="page-icon"><?= wayfairs_icon('support') ?></span><h2>Live chat</h2><p>Paste your Smartsupp widget key to enable live chat on customer and public pages. Leave blank to disable.</p></div>
+        <div class="settings-section-copy"><span class="page-icon"><?= wayfairs_icon('support') ?></span><h2 id="chat">Live chat</h2><p>Paste your Smartsupp widget key to enable live chat on customer and public pages. Leave blank to disable.</p></div>
         <div class="settings-fields">
           <label>Smartsupp key<input name="site_smartsupp_key" value="<?= e($values['site.smartsupp_key'] ?? '') ?>" maxlength="120" placeholder="abc123..." /></label>
           <p class="field-hint">Find the key in your Smartsupp dashboard under Settings → Widget.</p>
@@ -85,7 +85,7 @@ declare(strict_types=1);
 
     <div class="settings-section-panel" data-section="trading" hidden>
       <section class="card settings-section static">
-        <div class="settings-section-copy"><span class="page-icon"><?= wayfairs_icon('layers') ?></span><h2>Currency swaps</h2><p>Allow customers to convert between their own currency balances. Swaps are instant.</p></div>
+        <div class="settings-section-copy"><span class="page-icon"><?= wayfairs_icon('layers') ?></span><h2 id="trading">Currency swaps</h2><p>Allow customers to convert between their own currency balances. Swaps are instant.</p></div>
         <div class="settings-fields">
           <label class="inline-check"><input type="checkbox" name="swap_enabled" value="1" <?= ($values['swap.enabled'] ?? '0') === '1' ? 'checked' : '' ?> /> Enable currency swaps</label>
           <label>Swap fee (percent)<input name="swap_fee_percent" inputmode="decimal" value="<?= e((string) ($values['swap.fee_percent'] ?? '0.5')) ?>" placeholder="0.5" /></label>

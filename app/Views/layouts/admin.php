@@ -17,6 +17,12 @@ $links = [
     ['path' => '/admin/deposits', 'label' => 'Deposits', 'icon' => 'deposit'],
     ['path' => '/admin/withdrawals', 'label' => 'Withdrawals', 'icon' => 'withdraw'],
     ['path' => '/admin/settings', 'label' => 'Settings', 'icon' => 'settings'],
+    ['path' => '/admin/assets', 'label' => 'Currencies', 'icon' => 'layers'],
+    ['path' => '/admin/beneficiaries', 'label' => 'Beneficiaries', 'icon' => 'building'],
+    ['path' => '/admin/flights', 'label' => 'Flight requests', 'icon' => 'globe'],
+    ['path' => '/admin/otp', 'label' => 'Verification codes', 'icon' => 'security'],
+    ['path' => '/admin/smtp', 'label' => 'Email (SMTP)', 'icon' => 'support'],
+    ['path' => '/admin/email-templates', 'label' => 'Email templates', 'icon' => 'invoice'],
     ['path' => '/admin/audit', 'label' => 'Audit log', 'icon' => 'audit'],
 ];
 $currentLabel = 'Dashboard';
@@ -50,7 +56,21 @@ $footerMode = 'compact';
       <p class="side-label">Administration</p>
       <nav class="side-nav" aria-label="Administration navigation">
         <?php foreach ($links as $link): ?>
-          <a class="side-link<?= wayfairs_nav_active($link['path']) ? ' active' : '' ?>" href="<?= e(wayfairs_url($link['path'])) ?>"<?= wayfairs_nav_active($link['path']) ? ' aria-current="page"' : '' ?>><?= wayfairs_icon($link['icon']) ?><span><?= e($link['label']) ?></span></a>
+          <?php if ($link['path'] === '/admin/settings'): ?>
+            <details class="nav-dropdown" <?= wayfairs_nav_active('/admin/settings') || in_array(wayfairs_current_path(), ['/admin/assets','/admin/beneficiaries','/admin/flights','/admin/otp','/admin/smtp','/admin/email-templates'], true) ? 'open' : '' ?>>
+              <summary class="side-link<?= wayfairs_nav_active($link['path']) ? ' active' : '' ?>"><?= wayfairs_icon($link['icon']) ?><span><?= e($link['label']) ?></span><span class="nav-caret"><?= wayfairs_icon('arrow-right') ?></span></summary>
+              <div class="nav-sub">
+                <a class="side-link sub" href="<?= e(wayfairs_url('/admin/settings#payments')) ?>">Payments</a>
+                <a class="side-link sub" href="<?= e(wayfairs_url('/admin/settings#brand')) ?>">Brand</a>
+                <a class="side-link sub" href="<?= e(wayfairs_url('/admin/settings#support')) ?>">Support</a>
+                <a class="side-link sub" href="<?= e(wayfairs_url('/admin/settings#notices')) ?>">Notices</a>
+                <a class="side-link sub" href="<?= e(wayfairs_url('/admin/settings#chat')) ?>">Live chat</a>
+                <a class="side-link sub" href="<?= e(wayfairs_url('/admin/settings#trading')) ?>">Trading</a>
+              </div>
+            </details>
+          <?php else: ?>
+            <a class="side-link<?= wayfairs_nav_active($link['path']) ? ' active' : '' ?>" href="<?= e(wayfairs_url($link['path'])) ?>"<?= wayfairs_nav_active($link['path']) ? ' aria-current="page"' : '' ?>><?= wayfairs_icon($link['icon']) ?><span><?= e($link['label']) ?></span></a>
+          <?php endif; ?>
         <?php endforeach; ?>
       </nav>
     </div>
