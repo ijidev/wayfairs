@@ -540,6 +540,14 @@ body.app-shell{
 .settings-tab.active{color:var(--brand-2);background:var(--brand-soft)}
 @media (max-width:640px){.settings-tab{padding:.45rem .7rem;font-size:.8rem}}
 
+.settings-layout{display:grid;grid-template-columns:13rem minmax(0,1fr);gap:1rem;align-items:start}
+.settings-sidemenu{display:grid;gap:.25rem;position:sticky;top:1rem;padding:.4rem;background:var(--card);border:1px solid var(--line);border-radius:14px}
+.settings-side-link{padding:.55rem .75rem;border-radius:10px;border:0;background:transparent;color:var(--muted);font-weight:750;font-size:.86rem;cursor:pointer;text-align:left}
+.settings-side-link:hover{color:var(--ink);background:var(--paper)}
+.settings-side-link.active{color:var(--brand-2);background:var(--brand-soft)}
+.settings-content{min-width:0}
+@media (max-width:720px){.settings-layout{grid-template-columns:1fr}.settings-sidemenu{position:static;grid-auto-flow:column;grid-auto-columns:max-content;overflow-x:auto}}
+
 .compact-accounts{width:100%;border-collapse:collapse;font-size:.85rem}
 .compact-accounts th,.compact-accounts td{padding:.6rem .7rem;border-bottom:1px solid var(--line-2);vertical-align:middle}
 .compact-accounts th{font-size:.72rem;color:var(--muted);text-align:left;font-weight:700}
