@@ -35,7 +35,7 @@ sort($assetCodes);
     <ul class="tx-list">
     <?php foreach ($transactions as $transaction): $credit = (string) $transaction['direction'] === 'credit'; $rate = $usdRates[$transaction['asset_code']] ?? null; $status = (string) $transaction['status']; ?>
       <li>
-        <a class="tx-row admin-tx-row" data-filter-row data-asset="<?= e((string) $transaction['asset_code']) ?>" data-status="<?= e($status) ?>" href="<?= e(wayfairs_url('/admin/users/' . $transaction['user_id'] . '?panel=transactions')) ?>">
+        <a class="tx-row admin-tx-row" data-filter-row data-asset="<?= e((string) $transaction['asset_code']) ?>" data-status="<?= e($status) ?>" href="<?= e(wayfairs_url('/admin/transactions/' . $transaction['id'])) ?>">
           <span class="tx-row-icon <?= $credit ? 'credit' : 'debit' ?>"><?= wayfairs_icon($credit ? 'deposit' : 'withdraw') ?></span>
           <span class="tx-row-main">
             <span class="tx-row-top"><strong class="tx-row-title"><?= e(trim((string) $transaction['first_name'] . ' ' . (string) $transaction['last_name'])) ?> · <?= e((string) $transaction['description']) ?></strong><span class="tx-row-amount <?= $credit ? 'amount-positive' : 'amount-negative' ?>"><?= e(($credit ? '+' : '−') . wayfairs_amount((int) $transaction['amount_minor'], (int) $transaction['asset_scale'], (string) $transaction['asset_symbol'], (string) $transaction['asset_code'])) ?></span></span>

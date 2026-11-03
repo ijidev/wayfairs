@@ -198,14 +198,14 @@ if (!array_key_exists($activePanel, $panels)) {
     <ul class="tx-list">
     <?php foreach ($history as $transaction): $credit = (string) $transaction['direction'] === 'credit'; $rate = $usdRates[$transaction['asset_code']] ?? null; $status = (string) $transaction['status']; ?>
       <li>
-        <div class="tx-row admin-tx-row">
+        <a class="tx-row admin-tx-row" href="<?= e(wayfairs_url('/admin/transactions/' . $transaction['id'])) ?>">
           <span class="tx-row-icon <?= $credit ? 'credit' : 'debit' ?>"><?= wayfairs_icon($credit ? 'deposit' : 'withdraw') ?></span>
           <span class="tx-row-main">
             <span class="tx-row-top"><strong class="tx-row-title"><?= e((string) $transaction['description']) ?></strong><span class="tx-row-amount <?= $credit ? 'amount-positive' : 'amount-negative' ?>"><?= e(($credit ? '+' : '−') . wayfairs_amount((int) $transaction['amount_minor'], (int) $transaction['asset_scale'], (string) $transaction['asset_symbol'], (string) $transaction['asset_code'])) ?></span></span>
             <span class="tx-row-meta"><?= e(str_replace('_', ' ', (string) $transaction['transaction_type'])) ?> · <?= e(wayfairs_datetime((string) $transaction['created_at'])) ?> · <?= e(wayfairs_usd_equivalent((int) $transaction['amount_minor'], (int) $transaction['asset_scale'], $rate)) ?></span>
             <span class="tx-row-bottom"><?= wayfairs_pill($status) ?><span class="tx-row-ref"><?= e((string) $transaction['public_reference']) ?></span></span>
           </span>
-        </div>
+        </a>
       </li>
     <?php endforeach; ?>
     </ul>

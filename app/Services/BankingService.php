@@ -554,6 +554,18 @@ final class BankingService
         return $row;
     }
 
+    public function receiptForAdmin(string $transactionId): array
+    {
+        $row = $this->database->fetchOne(
+            'SELECT t.*, u.email AS customer_email, u.first_name, u.last_name, a.account_number, aset.id AS asset_id, aset.code AS asset_code, aset.symbol AS asset_symbol, aset.scale AS asset_scale, aset.asset_type, aset.usd_provider_reference FROM transactions t JOIN users u ON u.id = t.user_id JOIN accounts a ON a.id = t.account_id JOIN assets aset ON aset.id = a.asset_id WHERE t.id = ?',
+            [$transactionId]
+        );
+        if (!$row) {
+            throw new \RuntimeException('Transaction not found.');
+        }
+        return $row;
+    }
+
     private function createAccount(string $userId, array $asset): array
     {
         $user = $this->database->fetchOne('SELECT first_name, last_name FROM users WHERE id = ?', [$userId]) ?? [];

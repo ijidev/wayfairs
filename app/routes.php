@@ -894,6 +894,20 @@ return function (Router $router, Database $database): void {
         ]);
     }, 'admin');
 
+    $router->get('/admin/transactions/{id}', static function (Request $request) use ($admin, $banking, $rates): void {
+        try {
+            $receipt = $banking->receiptForAdmin((string) $request->route('id'));
+        } catch (RuntimeException) {
+            Response::notFound();
+        }
+        $admin('admin/transaction', [
+            'receipt' => $receipt,
+            'usdRates' => $rates->ratesForAssets([[
+                'id' => $receipt['asset_id'], 'code' => $receipt['asset_code'], 'asset_type' => $receipt['asset_type'], 'usd_provider_reference' => $receipt['usd_provider_reference'],
+            ]]),
+        ]);
+    }, 'admin');
+
     $router->post('/admin/withdrawals/{id}/decision', static function (Request $request) use ($banking, $database, $audit, $attempt): never {
         $id = (string) $request->route('id');
         $attempt(static function () use ($banking, $database, $audit, $id, $request): void {
