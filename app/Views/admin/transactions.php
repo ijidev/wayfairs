@@ -22,7 +22,7 @@ sort($assetCodes);
   <div class="metric-card <?= $exceptions > 0 ? 'bad' : '' ?>"><span class="metric-icon"><?= wayfairs_icon('info') ?></span><span class="metric-copy"><strong class="metric-value"><?= $exceptions ?></strong><span class="metric-label">Failed or reversed</span></span></div>
 </section>
 
-<section class="card table-card static" data-filter-scope>
+<section class="card static" data-filter-scope>
   <div class="panel-head"><div><h2>Global transaction history</h2><p>Up to 300 records, newest first. Amounts are never aggregated across currencies.</p></div></div>
   <?php if ($transactions === []): ?>
     <div class="empty-state"><div class="empty-icon"><?= wayfairs_icon('activity') ?></div><h3>No transaction records</h3><p>Customer money movements will appear here.</p></div>
@@ -32,9 +32,20 @@ sort($assetCodes);
       <label><span class="sr-only">Filter currency</span><select class="filter-select" data-filter-key="asset"><option value="">All currencies</option><?php foreach ($assetCodes as $code): ?><option value="<?= e($code) ?>"><?= e($code) ?></option><?php endforeach; ?></select></label>
       <label><span class="sr-only">Filter status</span><select class="filter-select" data-filter-key="status"><option value="">All statuses</option><option value="completed">Completed</option><option value="pending">Pending</option><option value="processing">Processing</option><option value="failed">Failed</option><option value="reversed">Reversed</option><option value="cancelled">Cancelled</option></select></label>
     </div>
-    <div class="table-wrap"><table><thead><tr><th>Created</th><th>Customer</th><th>Reference</th><th>Description</th><th>Amount</th><th>USD equivalent</th><th>Status</th></tr></thead><tbody>
-    <?php foreach ($transactions as $transaction): $credit = (string) $transaction['direction'] === 'credit'; $rate = $usdRates[$transaction['asset_code']] ?? null; ?><tr data-filter-row data-asset="<?= e((string) $transaction['asset_code']) ?>" data-status="<?= e((string) $transaction['status']) ?>"><td><?= e(wayfairs_datetime((string) $transaction['created_at'])) ?></td><td><a class="cell-title" href="<?= e(wayfairs_url('/admin/users/' . $transaction['user_id'])) ?>"><?= e(trim((string) $transaction['first_name'] . ' ' . (string) $transaction['last_name'])) ?></a><span class="cell-subtitle"><?= e((string) $transaction['email']) ?></span></td><td><code><?= e((string) $transaction['public_reference']) ?></code><span class="cell-subtitle"><?= e((string) $transaction['account_number']) ?></span></td><td><span class="cell-title"><?= e((string) $transaction['description']) ?></span><span class="cell-subtitle"><?= e(str_replace('_', ' ', (string) $transaction['transaction_type'])) ?></span></td><td class="cell-amount <?= $credit ? 'amount-positive' : 'amount-negative' ?>"><?= e(($credit ? '+' : '−') . wayfairs_amount((int) $transaction['amount_minor'], (int) $transaction['asset_scale'], (string) $transaction['asset_symbol'], (string) $transaction['asset_code'])) ?></td><td><span class="cell-title"><?= e(wayfairs_usd_equivalent((int) $transaction['amount_minor'], (int) $transaction['asset_scale'], $rate)) ?></span><span class="cell-subtitle"><?= e(wayfairs_rate_disclosure($rate)) ?></span></td><td><?= wayfairs_pill((string) $transaction['status']) ?></td></tr><?php endforeach; ?>
-    </tbody></table></div>
+    <ul class="tx-list">
+    <?php foreach ($transactions as $transaction): $credit = (string) $transaction['direction'] === 'credit'; $rate = $usdRates[$transaction['asset_code']] ?? null; $status = (string) $transaction['status']; ?>
+      <li>
+        <a class="tx-row admin-tx-row" data-filter-row data-asset="<?= e((string) $transaction['asset_code']) ?>" data-status="<?= e($status) ?>" href="<?= e(wayfairs_url('/admin/users/' . $transaction['user_id'] . '?panel=transactions')) ?>">
+          <span class="tx-row-icon <?= $credit ? 'credit' : 'debit' ?>"><?= wayfairs_icon($credit ? 'deposit' : 'withdraw') ?></span>
+          <span class="tx-row-main">
+            <span class="tx-row-top"><strong class="tx-row-title"><?= e(trim((string) $transaction['first_name'] . ' ' . (string) $transaction['last_name'])) ?> · <?= e((string) $transaction['description']) ?></strong><span class="tx-row-amount <?= $credit ? 'amount-positive' : 'amount-negative' ?>"><?= e(($credit ? '+' : '−') . wayfairs_amount((int) $transaction['amount_minor'], (int) $transaction['asset_scale'], (string) $transaction['asset_symbol'], (string) $transaction['asset_code'])) ?></span></span>
+            <span class="tx-row-meta"><?= e((string) $transaction['email']) ?> · <?= e(wayfairs_datetime((string) $transaction['created_at'])) ?></span>
+            <span class="tx-row-bottom"><?= wayfairs_pill($status) ?><span class="tx-row-ref"><?= e((string) $transaction['public_reference']) ?> · <?= e((string) $transaction['account_number']) ?></span></span>
+          </span>
+        </a>
+      </li>
+    <?php endforeach; ?>
+    </ul>
     <div class="empty-state" data-filter-empty hidden><div class="empty-icon"><?= wayfairs_icon('search') ?></div><h3>No matching transactions</h3><p>Change the search or filter values.</p></div>
   <?php endif; ?>
 </section>

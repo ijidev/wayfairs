@@ -604,3 +604,32 @@ body.app-shell{
 .tx-step strong{font-size:.9rem}
 .tx-step small{font-size:.76rem;color:var(--muted)}
 .tx-details>div{grid-template-columns:minmax(8rem,38%) 1fr}
+
+/* Admin: compact currency accounts (expand a row for controls) */
+.acct-list{list-style:none;margin:0;padding:0;display:grid;gap:.45rem}
+.acct-item{border:1px solid var(--line);border-radius:12px;background:var(--card);overflow:hidden}
+.acct-item>details>summary{list-style:none;cursor:pointer}
+.acct-item>details>summary::-webkit-details-marker{display:none}
+.acct-row{display:grid;grid-template-columns:52px minmax(0,1fr) auto auto;gap:.6rem;align-items:center;padding:.65rem .8rem}
+.acct-row:hover{background:var(--card-2)}
+.acct-code{font-weight:850;font-size:.85rem;color:var(--brand-2);background:var(--brand-soft);border-radius:8px;padding:.25rem 0;text-align:center}
+.acct-main{display:grid;gap:.1rem;min-width:0}
+.acct-main strong{font-size:.86rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.acct-main .mono{font-size:.72rem;color:var(--muted)}
+.acct-amount{display:grid;gap:0;text-align:right}
+.acct-amount strong{font-size:.86rem;white-space:nowrap}
+.acct-amount span{font-size:.7rem;color:var(--muted)}
+.acct-body{display:grid;gap:.7rem;padding:.7rem .8rem .9rem;border-top:1px solid var(--line-2);background:var(--card-2)}
+.acct-facts{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:.5rem}
+.acct-facts>div{display:grid;gap:.1rem}
+.acct-facts span{font-size:.7rem;color:var(--muted)}
+.acct-facts strong{font-size:.82rem}
+.acct-access{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.4fr) auto;gap:.5rem;align-items:end}
+.acct-access label{display:grid;gap:.2rem;font-size:.72rem;color:var(--muted);font-weight:700}
+.acct-access select,.acct-access input{padding:.4rem .5rem;font-size:.82rem;border:1px solid var(--line);border-radius:8px;background:var(--card);width:100%}
+@media (max-width:640px){
+  .acct-row{grid-template-columns:44px minmax(0,1fr) auto}
+  .acct-state{grid-column:2/-1}
+  .acct-facts{grid-template-columns:1fr 1fr}
+  .acct-access{grid-template-columns:1fr}
+}

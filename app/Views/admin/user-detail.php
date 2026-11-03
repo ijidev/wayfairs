@@ -48,25 +48,35 @@ if (!array_key_exists($activePanel, $panels)) {
   <?php if ($accounts === []): ?>
     <div class="empty-state"><div class="empty-icon"><?= wayfairs_icon('wallet') ?></div><h3>No currency accounts</h3><p>No customer accounts have been opened.</p></div>
   <?php else: ?>
-    <div class="table-wrap"><table class="compact-accounts"><thead><tr><th>Currency</th><th>Status</th><th>Available</th><th>Reserved</th><th>Account number</th><th>Access</th></tr></thead><tbody>
+    <ul class="acct-list">
     <?php foreach ($accounts as $account): $held = (int) ($account['held_minor'] ?? 0); $available = (int) $account['available_minor']; $rate = $usdRates[$account['code']] ?? null; ?>
-      <tr>
-        <td data-label="Currency"><span class="cell-title"><?= e((string) $account['code']) ?></span><span class="cell-subtitle"><?= e((string) $account['name'] ?? '') ?></span></td>
-        <td data-label="Status"><?= wayfairs_pill((string) $account['status']) ?></td>
-        <td data-label="Available" class="cell-amount"><?= e(wayfairs_amount($available, (int) $account['scale'], (string) $account['symbol'], (string) $account['code'])) ?></td>
-        <td data-label="Reserved" class="cell-amount"><?= e(wayfairs_amount($held, (int) $account['scale'], (string) $account['symbol'])) ?></td>
-        <td data-label="Account" class="mono"><?= e((string) $account['account_number']) ?></td>
-        <td data-label="Access">
-          <form class="inline-form" method="post" action="<?= e(wayfairs_url('/admin/users/' . $profile['id'] . '/accounts/' . $account['id'] . '/status')) ?>">
-            <input type="hidden" name="_token" value="<?= e(wayfairs_csrf()) ?>" />
-            <select name="status"><option value="active" <?= $account['status'] === 'active' ? 'selected' : '' ?>>Active</option><option value="restricted" <?= $account['status'] === 'restricted' ? 'selected' : '' ?>>Restricted</option><option value="frozen" <?= $account['status'] === 'frozen' ? 'selected' : '' ?>>Frozen</option><option value="closed" <?= $account['status'] === 'closed' ? 'selected' : '' ?>>Closed</option></select>
-            <input name="admin_remark" maxlength="120" placeholder="Remark" />
-            <button class="btn small ghost" type="submit">Save</button>
-          </form>
-        </td>
-      </tr>
+      <li class="acct-item">
+        <details>
+          <summary class="acct-row">
+            <span class="acct-code"><?= e((string) $account['code']) ?></span>
+            <span class="acct-main"><strong><?= e((string) ($account['name'] ?? $account['code'])) ?></strong><span class="mono"><?= e((string) $account['account_number']) ?></span></span>
+            <span class="acct-amount"><strong><?= e(wayfairs_amount($available, (int) $account['scale'], (string) $account['symbol'], (string) $account['code'])) ?></strong><span>available</span></span>
+            <span class="acct-state"><?= wayfairs_pill((string) $account['status']) ?></span>
+          </summary>
+          <div class="acct-body">
+            <div class="acct-facts">
+              <div><span>Reserved</span><strong><?= e(wayfairs_amount($held, (int) $account['scale'], (string) $account['symbol'])) ?></strong></div>
+              <div><span>Total</span><strong><?= e(wayfairs_amount($available + $held, (int) $account['scale'], (string) $account['symbol'], (string) $account['code'])) ?></strong></div>
+              <div><span>USD equivalent</span><strong><?= e(wayfairs_usd_equivalent($available + $held, (int) $account['scale'], $rate)) ?></strong></div>
+            </div>
+            <form class="acct-access" method="post" action="<?= e(wayfairs_url('/admin/users/' . $profile['id'] . '/accounts/' . $account['id'] . '/status')) ?>">
+              <input type="hidden" name="_token" value="<?= e(wayfairs_csrf()) ?>" />
+              <label>Access
+                <select name="status"><option value="active" <?= $account['status'] === 'active' ? 'selected' : '' ?>>Active</option><option value="restricted" <?= $account['status'] === 'restricted' ? 'selected' : '' ?>>Restricted</option><option value="frozen" <?= $account['status'] === 'frozen' ? 'selected' : '' ?>>Frozen</option><option value="closed" <?= $account['status'] === 'closed' ? 'selected' : '' ?>>Closed</option></select>
+              </label>
+              <label>Remark<input name="admin_remark" maxlength="120" placeholder="Optional" /></label>
+              <button class="btn small" type="submit">Save access</button>
+            </form>
+          </div>
+        </details>
+      </li>
     <?php endforeach; ?>
-    </tbody></table></div>
+    </ul>
   <?php endif; ?>
 </section>
 <?php endif; ?>
@@ -180,14 +190,25 @@ if (!array_key_exists($activePanel, $panels)) {
 <?php endif; ?>
 
 <?php if ($activePanel === 'transactions'): ?>
-<section class="card table-card static">
+<section class="card static">
   <div class="panel-head"><div><h2>Customer transactions</h2><p>Latest 100 persisted records across this customer's accounts.</p></div><span class="pill"><?= count($history) ?> loaded</span></div>
   <?php if ($history === []): ?>
     <div class="empty-state"><div class="empty-icon"><?= wayfairs_icon('activity') ?></div><h3>No transactions</h3><p>No money movement is recorded for this customer.</p></div>
   <?php else: ?>
-    <div class="table-wrap"><table><thead><tr><th>Date</th><th>Reference</th><th>Description</th><th>Currency</th><th>Amount</th><th>USD equivalent</th><th>Status</th></tr></thead><tbody>
-    <?php foreach ($history as $transaction): $credit = (string) $transaction['direction'] === 'credit'; $rate = $usdRates[$transaction['asset_code']] ?? null; ?><tr><td><?= e(wayfairs_datetime((string) $transaction['created_at'])) ?></td><td><code><?= e((string) $transaction['public_reference']) ?></code></td><td><span class="cell-title"><?= e((string) $transaction['description']) ?></span><span class="cell-subtitle"><?= e(str_replace('_', ' ', (string) $transaction['transaction_type'])) ?></span></td><td><?= e((string) $transaction['asset_code']) ?></td><td class="cell-amount <?= $credit ? 'amount-positive' : 'amount-negative' ?>"><?= e(($credit ? '+' : '−') . wayfairs_amount((int) $transaction['amount_minor'], (int) $transaction['asset_scale'], (string) $transaction['asset_symbol'])) ?></td><td><?= e(wayfairs_usd_equivalent((int) $transaction['amount_minor'], (int) $transaction['asset_scale'], $rate)) ?></td><td><?= wayfairs_pill((string) $transaction['status']) ?></td></tr><?php endforeach; ?>
-    </tbody></table></div>
+    <ul class="tx-list">
+    <?php foreach ($history as $transaction): $credit = (string) $transaction['direction'] === 'credit'; $rate = $usdRates[$transaction['asset_code']] ?? null; $status = (string) $transaction['status']; ?>
+      <li>
+        <div class="tx-row admin-tx-row">
+          <span class="tx-row-icon <?= $credit ? 'credit' : 'debit' ?>"><?= wayfairs_icon($credit ? 'deposit' : 'withdraw') ?></span>
+          <span class="tx-row-main">
+            <span class="tx-row-top"><strong class="tx-row-title"><?= e((string) $transaction['description']) ?></strong><span class="tx-row-amount <?= $credit ? 'amount-positive' : 'amount-negative' ?>"><?= e(($credit ? '+' : '−') . wayfairs_amount((int) $transaction['amount_minor'], (int) $transaction['asset_scale'], (string) $transaction['asset_symbol'], (string) $transaction['asset_code'])) ?></span></span>
+            <span class="tx-row-meta"><?= e(str_replace('_', ' ', (string) $transaction['transaction_type'])) ?> · <?= e(wayfairs_datetime((string) $transaction['created_at'])) ?> · <?= e(wayfairs_usd_equivalent((int) $transaction['amount_minor'], (int) $transaction['asset_scale'], $rate)) ?></span>
+            <span class="tx-row-bottom"><?= wayfairs_pill($status) ?><span class="tx-row-ref"><?= e((string) $transaction['public_reference']) ?></span></span>
+          </span>
+        </div>
+      </li>
+    <?php endforeach; ?>
+    </ul>
   <?php endif; ?>
 </section>
 <?php endif; ?>
