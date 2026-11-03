@@ -494,6 +494,41 @@ final class BankingService
         });
     }
 
+    /**
+     * Live status for the given transactions, scoped to the owner. Unknown or foreign
+     * IDs are silently absent, so the endpoint reveals nothing about other customers.
+     */
+    public function statusesFor(string $userId, array $transactionIds): array
+    {
+        $ids = [];
+        foreach ($transactionIds as $id) {
+            $id = trim((string) $id);
+            if (preg_match('/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i', $id) === 1) {
+                $ids[$id] = true;
+            }
+        }
+        $ids = array_slice(array_keys($ids), 0, 50);
+        if ($ids === []) {
+            return [];
+        }
+        $placeholders = implode(',', array_fill(0, count($ids), '?'));
+        $rows = $this->database->fetchAll(
+            "SELECT id, status, completed_at, updated_at FROM transactions WHERE user_id = ? AND id IN ($placeholders)",
+            array_merge([$userId], $ids)
+        );
+        $result = [];
+        foreach ($rows as $row) {
+            $status = (string) $row['status'];
+            $result[(string) $row['id']] = [
+                'status' => $status,
+                'final' => in_array($status, ['completed', 'failed', 'reversed', 'cancelled'], true),
+                'completed_at' => $row['completed_at'] !== null ? wayfairs_datetime((string) $row['completed_at']) : null,
+                'updated_at' => wayfairs_datetime((string) $row['updated_at']),
+            ];
+        }
+        return $result;
+    }
+
     public function history(string $userId, ?string $accountId = null, int $limit = 100): array
     {
         $sql = 'SELECT t.*, a.account_number, aset.id AS asset_id, aset.code AS asset_code, aset.symbol AS asset_symbol, aset.scale AS asset_scale, aset.asset_type, aset.usd_provider_reference FROM transactions t JOIN accounts a ON a.id = t.account_id JOIN assets aset ON aset.id = a.asset_id WHERE t.user_id = ?';

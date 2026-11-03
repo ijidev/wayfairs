@@ -167,6 +167,25 @@ return function (Router $router, Database $database): void {
         ]);
     }, 'auth');
 
+    $router->get('/transactions/status', static function (Request $request) use ($banking, $me): never {
+        $ids = explode(',', (string) $request->input('ids', ''));
+        Response::json(['statuses' => $banking->statusesFor((string) $me()['id'], $ids)]);
+    }, 'auth');
+
+    $router->get('/transactions/{id}', static function (Request $request) use ($page, $banking, $me, $rates): void {
+        try {
+            $receipt = $banking->receipt((string) $request->route('id'), (string) $me()['id']);
+        } catch (RuntimeException) {
+            Response::notFound();
+        }
+        $page('user/transaction', [
+            'receipt' => $receipt,
+            'usdRates' => $rates->ratesForAssets([[
+                'id' => $receipt['asset_id'], 'code' => $receipt['asset_code'], 'asset_type' => $receipt['asset_type'], 'usd_provider_reference' => $receipt['usd_provider_reference'],
+            ]]),
+        ]);
+    }, 'auth');
+
     $router->get('/receipts/{id}', static function (Request $request) use ($page, $banking, $me, $rates): void {
         $receipt = $banking->receipt((string) $request->route('id'), (string) $me()['id']);
         $page('user/receipt', [

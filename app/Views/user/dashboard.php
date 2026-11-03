@@ -167,7 +167,7 @@ $fullName = trim((string) ($user['first_name'] ?? '') . ' ' . (string) ($user['l
     <?php else: ?>
       <div class="transaction-list">
         <?php foreach (array_slice($history, 0, 6) as $row): $credit = (string) $row['direction'] === 'credit'; $rowRate = $usdRates[$row['asset_code']] ?? null; ?>
-          <a class="transaction-item" href="<?= e(wayfairs_url('/receipts/' . $row['id'])) ?>">
+          <a class="transaction-item" href="<?= e(wayfairs_url('/transactions/' . $row['id'])) ?>">
             <span class="transaction-symbol <?= $credit ? 'credit' : 'debit' ?>"><?= wayfairs_icon($credit ? 'deposit' : 'withdraw') ?></span>
             <span class="transaction-main"><strong><?= e((string) $row['description']) ?></strong><span><?= e(str_replace('_', ' ', (string) $row['transaction_type'])) ?> · <?= e((string) $row['public_reference']) ?></span></span>
             <span class="transaction-meta"><strong><?= e(wayfairs_usd_equivalent((int) $row['amount_minor'], (int) $row['asset_scale'], $rowRate)) ?></strong><span><?= e(wayfairs_datetime((string) $row['created_at'])) ?></span></span>

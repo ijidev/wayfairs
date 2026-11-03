@@ -49,24 +49,4 @@ $rate = $usdRates[$r['asset_code']] ?? null;
     </div>
   </article>
 </div>
-<script>
-(function () {
-  var status = <?= json_encode((string) $r['status']) ?>;
-  if (['completed', 'failed', 'reversed', 'cancelled'].indexOf(status) !== -1) return;
-  var url = window.location.href;
-  setInterval(function () {
-    fetch(url, { credentials: 'same-origin', headers: { 'Accept': 'text/html' } })
-      .then(function (response) { return response.text(); })
-      .then(function (html) {
-        var match = html.match(/class="receipt-amount"[^>]*>[\s\S]*?<span[^>]*>([^<]*)<\/span>/);
-        // Reload only when the status pill text changed.
-        var pillMatch = html.match(/class="pill [a-z]+"[^>]*>([^<]+)</);
-        var currentPill = document.querySelector('.receipt-banner .pill');
-        if (pillMatch && currentPill && pillMatch[1].trim() !== currentPill.textContent.trim()) {
-          window.location.reload();
-        }
-      })
-      .catch(function () {});
-  }, 5000);
-})();
-</script>
+
