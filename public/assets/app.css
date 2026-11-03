@@ -534,6 +534,12 @@ body.app-shell{
 .subnav-link.active{color:var(--brand-2);background:var(--brand-soft);border-color:#a8d5c8}
 @media (max-width:640px){.subnav{gap:.35rem}.subnav-link{padding:.45rem .7rem;font-size:.8rem}}
 
+.settings-tabs{display:flex;flex-wrap:wrap;gap:.4rem;padding:.3rem;background:var(--card);border:1px solid var(--line);border-radius:14px;margin-bottom:1rem}
+.settings-tab{padding:.55rem 1rem;border-radius:10px;border:0;background:transparent;color:var(--muted);font-weight:750;font-size:.86rem;cursor:pointer}
+.settings-tab:hover{color:var(--ink);background:var(--paper)}
+.settings-tab.active{color:var(--brand-2);background:var(--brand-soft)}
+@media (max-width:640px){.settings-tab{padding:.45rem .7rem;font-size:.8rem}}
+
 .compact-accounts{width:100%;border-collapse:collapse;font-size:.85rem}
 .compact-accounts th,.compact-accounts td{padding:.6rem .7rem;border-bottom:1px solid var(--line-2);vertical-align:middle}
 .compact-accounts th{font-size:.72rem;color:var(--muted);text-align:left;font-weight:700}
