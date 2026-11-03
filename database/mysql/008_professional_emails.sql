@@ -110,8 +110,8 @@ Our team will contact you to confirm availability and pricing before any booking
 Regards,
 Wayfairs', updated_at = CURRENT_TIMESTAMP(6) WHERE template_key = 'flight_request';
 
-INSERT INTO email_templates (id, template_key, subject, body, updated_at) VALUES
-(CHAR(36) CHARACTER SET ascii..., 'account_status', 'Important update to your account', 'Dear {first_name},
+INSERT IGNORE INTO email_templates (id, template_key, subject, body, updated_at) VALUES
+(UUID(), 'account_status', 'Important update to your account', 'Dear {first_name},
 
 There has been an update to your account.
 

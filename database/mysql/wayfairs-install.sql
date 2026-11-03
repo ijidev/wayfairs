@@ -700,8 +700,8 @@ Our team will contact you to confirm availability and pricing before any booking
 Regards,
 Wayfairs', updated_at = CURRENT_TIMESTAMP(6) WHERE template_key = 'flight_request';
 
-INSERT INTO email_templates (id, template_key, subject, body, updated_at) VALUES
-(CHAR(36) CHARACTER SET ascii..., 'account_status', 'Important update to your account', 'Dear {first_name},
+INSERT IGNORE INTO email_templates (id, template_key, subject, body, updated_at) VALUES
+(UUID(), 'account_status', 'Important update to your account', 'Dear {first_name},
 
 There has been an update to your account.
 
@@ -721,4 +721,4 @@ INSERT INTO schema_migrations (version, checksum, applied_at) VALUES
     ('005_flight_requests', '58d69c73fbcb972320ea7da2d5cb318669c8065b56baa714aa39058a537be8cc', UTC_TIMESTAMP(6)),
     ('006_beneficiaries', 'b60911b44ed0a4cc2ff656625bb6a63c4f4f3c0034c1f2d12dd1b47ace68ef1b', UTC_TIMESTAMP(6)),
     ('007_otp_and_email', '4973a91448907c47f7382cf3c04bae30099ce9a13fc042f0078b6d86b9c18665', UTC_TIMESTAMP(6)),
-    ('008_professional_emails', '1950ab5db950da5dd674441407d588e8fd73388c96da1af507a83353014fd14d', UTC_TIMESTAMP(6));
+    ('008_professional_emails', '1a16aa3b5e419310d13341af41d5225973e588d72b04358c21b8830160a2c592', UTC_TIMESTAMP(6));
