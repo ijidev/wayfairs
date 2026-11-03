@@ -173,8 +173,12 @@ return function (Router $router, Database $database): void {
     }, 'auth');
 
     $router->get('/transactions/{id}', static function (Request $request) use ($page, $banking, $me, $rates): void {
+        $user = $me();
+        $id = (string) $request->route('id');
         try {
-            $receipt = $banking->receipt((string) $request->route('id'), (string) $me()['id']);
+            $receipt = ($user['role'] ?? '') === 'admin'
+                ? $banking->receiptForAdmin($id)
+                : $banking->receipt($id, (string) ($user['id'] ?? ''));
         } catch (RuntimeException) {
             Response::notFound();
         }
@@ -187,7 +191,15 @@ return function (Router $router, Database $database): void {
     }, 'auth');
 
     $router->get('/receipts/{id}', static function (Request $request) use ($page, $banking, $me, $rates): void {
-        $receipt = $banking->receipt((string) $request->route('id'), (string) $me()['id']);
+        $user = $me();
+        $id = (string) $request->route('id');
+        try {
+            $receipt = ($user['role'] ?? '') === 'admin'
+                ? $banking->receiptForAdmin($id)
+                : $banking->receipt($id, (string) ($user['id'] ?? ''));
+        } catch (RuntimeException) {
+            Response::notFound();
+        }
         $page('user/receipt', [
             'receipt' => $receipt,
             'usdRates' => $rates->ratesForAssets([[
@@ -392,7 +404,7 @@ return function (Router $router, Database $database): void {
             Flash::put('success', $kind === 'bill' ? 'Bill payment submitted. Funds are held while it is processed.' : 'Bank transfer submitted. Funds are held while it is processed.');
             $transactionId = (string) ($result['transaction_id'] ?? '');
             if ($transactionId !== '') {
-                Response::redirect('/receipts/' . $transactionId);
+                Response::redirect('/transactions/' . $transactionId);
             }
             Response::redirect($back);
         } catch (\PDOException $error) {
