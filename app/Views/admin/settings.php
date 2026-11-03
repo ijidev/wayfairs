@@ -11,6 +11,15 @@ declare(strict_types=1);
 
 <div class="settings-layout">
 
+  <nav class="settings-sidemenu" aria-label="Settings sections">
+    <a class="settings-side-link" data-settings-link="payments" href="#payments">Payments</a>
+    <a class="settings-side-link" data-settings-link="brand" href="#brand">Brand</a>
+    <a class="settings-side-link" data-settings-link="support" href="#support">Support</a>
+    <a class="settings-side-link" data-settings-link="notices" href="#notices">Notices</a>
+    <a class="settings-side-link" data-settings-link="chat" href="#chat">Live chat</a>
+    <a class="settings-side-link" data-settings-link="trading" href="#trading">Trading</a>
+  </nav>
+
   <div class="settings-content">
     <div class="settings-section-panel" data-section="payments">
       <section class="card settings-section static">
