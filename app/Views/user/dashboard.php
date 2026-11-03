@@ -83,10 +83,9 @@ $fullName = trim((string) ($user['first_name'] ?? '') . ' ' . (string) ($user['l
   <section class="portfolio-grid">
     <article class="bank-balance-card" aria-label="<?= e((string) $asset['name']) ?> balance card">
       <div class="bank-card-top"><span class="bank-card-brand"><span class="mark"><?= e(mb_substr((string) ($site['site.name'] ?? 'Wayfairs'), 0, 1)) ?></span><span><strong><?= e((string) ($site['site.name'] ?? 'Wayfairs')) ?></strong><small>Everyday account</small></span></span><span class="bank-card-currency"><?= e($activeCode) ?></span></div>
-      <div class="bank-card-chip" aria-hidden="true"><span></span><span></span><span></span></div>
-      <div class="bank-card-balance"><small>Available balance</small><strong><?= e(wayfairs_amount($available, (int) $asset['scale'], (string) $asset['symbol'], (string) $asset['code'])) ?></strong><span>≈ <?= e(wayfairs_usd_equivalent($available, (int) $asset['scale'], $activeRate)) ?></span></div>
+      <div class="bank-card-balance"><small>Available balance</small><?php if ((string) $asset['asset_type'] === 'crypto'): ?><strong class="bank-card-amount">≈ <?= e(wayfairs_usd_equivalent($available, (int) $asset['scale'], $activeRate)) ?></strong><span><?= e(wayfairs_amount($available, (int) $asset['scale'], (string) $asset['symbol'], (string) $asset['code'])) ?></span><?php else: ?><strong class="bank-card-amount"><?= e(wayfairs_amount($available, (int) $asset['scale'], (string) $asset['symbol'], (string) $asset['code'])) ?></strong><span>≈ <?= e(wayfairs_usd_equivalent($available, (int) $asset['scale'], $activeRate)) ?></span><?php endif; ?></div>
       <div class="bank-card-number" translate="no"><?= e($accountDisplay) ?></div>
-      <div class="bank-card-bottom"><span><small>Account holder</small><strong><?= e($fullName ?: 'Account owner') ?></strong></span><span><small>Total balance</small><strong><?= e(wayfairs_amount($total, (int) $asset['scale'], (string) $asset['symbol'])) ?></strong></span><span class="contactless"><?= wayfairs_icon('activity') ?></span></div>
+      <div class="bank-card-bottom"><span><small>Account holder</small><strong><?= e($fullName ?: 'Account owner') ?></strong></span><span><small>Total balance</small><strong><?= e(wayfairs_amount($total, (int) $asset['scale'], (string) $asset['symbol'])) ?></strong></span><span><small>Total assets</small><strong><?= e(wayfairs_amount($portfolioUsdMinor, 2, '$', 'USD')) ?></strong></span></div>
     </article>
 
     <article class="card static portfolio-control">
