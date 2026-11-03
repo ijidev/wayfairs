@@ -15,9 +15,11 @@ $total = (int) $r['amount_minor'] + ($credit ? 0 : $fee);
 $rate = $usdRates[$code] ?? null;
 $metadata = json_decode((string) ($r['metadata'] ?? '{}'), true);
 $remark = is_array($metadata) ? trim((string) ($metadata['user_remark'] ?? '')) : '';
-$typeLabel = is_array($metadata) && ($metadata['request_kind'] ?? null) === 'bank_transfer'
-    ? 'Bank transfer'
-    : ucwords(str_replace('_', ' ', (string) $r['transaction_type']));
+$typeLabel = is_array($metadata) && ($metadata['kind'] ?? null) === 'swap'
+    ? 'Currency swap'
+    : (is_array($metadata) && ($metadata['request_kind'] ?? null) === 'bank_transfer'
+        ? 'Bank transfer'
+        : ucwords(str_replace('_', ' ', (string) $r['transaction_type'])));
 $tone = match (true) {
     $status === 'completed' => 'good',
     in_array($status, ['failed', 'reversed', 'cancelled'], true) => 'bad',

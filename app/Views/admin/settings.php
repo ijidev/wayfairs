@@ -31,6 +31,7 @@ declare(strict_types=1);
   <button type="button" class="settings-tab" data-tab="support" role="tab" aria-selected="false">Support</button>
   <button type="button" class="settings-tab" data-tab="notices" role="tab" aria-selected="false">Notices</button>
   <button type="button" class="settings-tab" data-tab="chat" role="tab" aria-selected="false">Live chat</button>
+  <button type="button" class="settings-tab" data-tab="trading" role="tab" aria-selected="false">Trading</button>
 </nav>
 
 <form class="settings-form" method="post" action="<?= e(wayfairs_url('/admin/settings')) ?>">
@@ -73,6 +74,17 @@ declare(strict_types=1);
       <div class="settings-fields">
         <label>Smartsupp key<input name="site_smartsupp_key" value="<?= e($values['site.smartsupp_key'] ?? '') ?>" maxlength="120" placeholder="abc123..." /></label>
         <p class="field-hint">Find the key in your Smartsupp dashboard under Settings → Widget.</p>
+      </div>
+    </section>
+  </div>
+
+  <div class="settings-panel" data-panel="trading" hidden>
+    <section class="card settings-section static">
+      <div class="settings-section-copy"><span class="page-icon"><?= wayfairs_icon('layers') ?></span><h2>Currency swaps</h2><p>Allow customers to convert between their own currency balances. Swaps are instant.</p></div>
+      <div class="settings-fields">
+        <label class="inline-check"><input type="checkbox" name="swap_enabled" value="1" <?= ($values['swap.enabled'] ?? '0') === '1' ? 'checked' : '' ?> /> Enable currency swaps</label>
+        <label>Swap fee (percent)<input name="swap_fee_percent" inputmode="decimal" value="<?= e((string) ($values['swap.fee_percent'] ?? '0.5')) ?>" placeholder="0.5" /></label>
+        <p class="field-hint">Fee is taken from the amount being converted. Enter a number between 0 and 10.</p>
       </div>
     </section>
   </div>

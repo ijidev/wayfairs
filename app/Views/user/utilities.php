@@ -17,4 +17,9 @@ declare(strict_types=1);
     <span class="utility-copy"><strong>Book a flight</strong><small>Tell us where and when you want to travel. We confirm availability and price before anything is booked.</small></span>
     <span class="transaction-arrow"><?= wayfairs_icon('arrow-right') ?></span>
   </a>
+  <a class="utility-card" href="<?= e(wayfairs_url('/swap')) ?>">
+    <span class="icon-wrap"><?= wayfairs_icon('layers') ?></span>
+    <span class="utility-copy"><strong>Swap currencies</strong><small>Convert a balance from one currency to another at the current market rate.</small></span>
+    <span class="transaction-arrow"><?= wayfairs_icon('arrow-right') ?></span>
+  </a>
 </section>

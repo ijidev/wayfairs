@@ -9,9 +9,11 @@ $amount = wayfairs_amount((int) $r['amount_minor'], (int) $r['asset_scale'], (st
 $fee = (int) $r['fee_minor'] > 0 ? wayfairs_amount((int) $r['fee_minor'], (int) $r['asset_scale'], (string) $r['asset_symbol'], (string) $r['asset_code']) : null;
 $credit = (string) $r['direction'] === 'credit';
 $metadata = json_decode((string) ($r['metadata'] ?? '{}'), true);
-$typeLabel = is_array($metadata) && ($metadata['request_kind'] ?? null) === 'bank_transfer'
-    ? 'Bank Transfer'
-    : ucwords(str_replace('_', ' ', (string) $r['transaction_type']));
+$typeLabel = is_array($metadata) && ($metadata['kind'] ?? null) === 'swap'
+    ? 'Currency swap'
+    : (is_array($metadata) && ($metadata['request_kind'] ?? null) === 'bank_transfer'
+        ? 'Bank Transfer'
+        : ucwords(str_replace('_', ' ', (string) $r['transaction_type'])));
 $rate = $usdRates[$r['asset_code']] ?? null;
 ?>
 <div class="receipt-page">

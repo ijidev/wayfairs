@@ -25,6 +25,7 @@ use Wayfairs\Services\KycService;
 use Wayfairs\Services\LedgerService;
 use Wayfairs\Services\Restrictions;
 use Wayfairs\Services\SiteSettings;
+use Wayfairs\Services\SwapService;
 use Wayfairs\Services\UsdRateService;
 
 return function (Router $router, Database $database): void {
@@ -37,6 +38,7 @@ return function (Router $router, Database $database): void {
     $audit = new Audit($database);
     $flights = new FlightService($database, $audit);
     $beneficiaries = new BeneficiaryService($database, $banking, $audit);
+    $swaps = new SwapService($database, $banking, $ledger, $audit);
     $mailer = new Mailer($database);
     $emailTemplates = new EmailTemplates($database);
     $otp = new OtpService($database, $mailer, $emailTemplates);
@@ -548,6 +550,82 @@ return function (Router $router, Database $database): void {
         }, 'Flight request sent. We will contact you to confirm availability and price.', '/flights');
     }, 'auth', true);
 
+    $router->get('/swap', static function () use ($page, $banking, $ledger, $accountRows, $me, $database, $kyc, $rates, $swaps): void {
+        $user = $me();
+        $accounts = $accountRows($banking, $ledger, $database, (string) $user['id']);
+        $fiatAccounts = array_values(array_filter($accounts, static fn (array $a): bool => (string) $a['asset']['asset_type'] === 'fiat'));
+        $preview = null;
+        $old = Draft::get('form.swap') ?? [];
+        if (isset($old['from_code'], $old['to_code'], $old['amount']) && $old['from_code'] !== '' && $old['to_code'] !== '' && $old['amount'] !== '') {
+            try {
+                $preview = $swaps->preview((string) $user['id'], $old['from_code'], $old['to_code'], $old['amount']);
+            } catch (RuntimeException) {
+                $preview = null;
+            }
+        }
+        $page('user/swap', [
+            'accounts' => $accounts,
+            'fiatAccounts' => $fiatAccounts,
+            'kyc' => $kyc->profile((string) $user['id']),
+            'swapsEnabled' => $swaps->isEnabled(),
+            'feePercent' => $swaps->feePercent(),
+            'preview' => $preview,
+            'old' => $old,
+            'usdRates' => $rates->ratesForAssets(array_column($accounts, 'asset')),
+        ]);
+    }, 'auth');
+
+    $router->post('/swap/review', static function (Request $request) use ($swaps, $attempt): never {
+        $user = Context::user() ?? [];
+        $input = [
+            'from_code' => trim((string) $request->post('from_code', '')),
+            'to_code' => trim((string) $request->post('to_code', '')),
+            'amount' => trim((string) $request->post('amount', '')),
+        ];
+        Draft::put('form.swap', $input);
+        try {
+            $swaps->preview((string) $user['id'], $input['from_code'], $input['to_code'], $input['amount']);
+            Draft::put('review.swap', $input + ['idem' => Security::token(16)]);
+            Response::redirect('/swap/review');
+        } catch (RuntimeException | InvalidArgumentException $error) {
+            Flash::put('error', $error->getMessage());
+        } catch (Throwable $error) {
+            $reference = Context::requestId();
+            error_log(sprintf('[wayfairs] request=%s %s: %s in %s:%d', $reference, $error::class, $error->getMessage(), $error->getFile(), $error->getLine()));
+            Flash::put('error', 'That did not complete. Please try again. Reference: ' . $reference);
+        }
+        Response::redirect('/swap');
+    }, 'auth', true);
+
+    $router->get('/swap/review', static function () use ($page, $swaps, $banking, $ledger, $accountRows, $me, $database, $kyc, $rates): void {
+        $user = $me();
+        $input = Draft::get('review.swap');
+        if ($input === null) {
+            Flash::put('error', 'This review has expired. Enter the details again.');
+            Response::redirect('/swap');
+        }
+        try {
+            $preview = $swaps->preview((string) $user['id'], $input['from_code'], $input['to_code'], $input['amount']);
+        } catch (RuntimeException | InvalidArgumentException $error) {
+            Flash::put('error', $error->getMessage());
+            Response::redirect('/swap');
+        }
+        $page('user/swap-review', ['preview' => $preview, 'input' => $input]);
+    }, 'auth');
+
+    $router->post('/swap/confirm', static function () use ($swaps, $attempt): never {
+        $user = Context::user() ?? [];
+        $input = Draft::take('review.swap');
+        if ($input === null) {
+            Flash::put('error', 'This review has expired. Enter the details again.');
+            Response::redirect('/swap');
+        }
+        $attempt(static function () use ($swaps, $user, $input): void {
+            $swaps->execute((string) $user['id'], $input['from_code'], $input['to_code'], $input['amount'], (string) $input['idem']);
+            Draft::forget('form.swap');
+        }, 'Currency swap completed.', '/swap');
+    }, 'auth', true);
+
     $router->post('/transfer/internal', static function (Request $request) use ($banking, $database, $attempt, $mailer, $emailTemplates): never {
         $user = Context::user() ?? [];
         $attempt(static function () use ($banking, $database, $mailer, $emailTemplates, $user, $request): void {
@@ -995,6 +1073,16 @@ return function (Router $router, Database $database): void {
                 if ($key === 'smtp.verify_peer') {
                     $value = $request->post('smtp_verify_peer') === '1' ? '1' : '0';
                 }
+                if ($key === 'swap.enabled') {
+                    $value = $request->post('swap_enabled') === '1' ? '1' : '0';
+                }
+                if ($key === 'swap.fee_percent') {
+                    $v = (float) str_replace(',', '.', $value);
+                    if ($v < 0 || $v > 10) {
+                        throw new RuntimeException('Swap fee must be between 0 and 10 percent.');
+                    }
+                    $value = (string) $v;
+                }
                 if ($key === 'smtp.from_email' && $value !== '' && !filter_var($value, FILTER_VALIDATE_EMAIL)) {
                     throw new RuntimeException('Enter a valid from email address.');
                 }
@@ -1063,7 +1151,7 @@ return function (Router $router, Database $database): void {
 
     $router->post('/admin/settings', static function (Request $request) use ($settings, $audit, $attempt): never {
         $attempt(static function () use ($settings, $audit, $request): void {
-            $keys = ['site.name', 'site.tagline', 'site.support_email', 'site.support_phone', 'site.address', 'site.primary_color', 'site.accent_color', 'site.deposit_instructions_fiat', 'site.deposit_instructions_crypto', 'site.withdrawal_notice', 'site.kyc_notice', 'site.footer', 'site.smartsupp_key'];
+            $keys = ['site.name', 'site.tagline', 'site.support_email', 'site.support_phone', 'site.address', 'site.primary_color', 'site.accent_color', 'site.deposit_instructions_fiat', 'site.deposit_instructions_crypto', 'site.withdrawal_notice', 'site.kyc_notice', 'site.footer', 'site.smartsupp_key', 'swap.enabled', 'swap.fee_percent'];
             $values = [];
             foreach ($keys as $key) {
                 $value = trim((string) $request->post(str_replace('.', '_', $key), ''));
