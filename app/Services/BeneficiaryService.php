@@ -82,9 +82,6 @@ final class BeneficiaryService
 
     public function archive(string $beneficiaryId, string $actorId, bool $isAdmin): void
     {
-        if (Context::isImpersonating()) {
-            throw new RuntimeException('Beneficiary changes are disabled during impersonation.');
-        }
         $this->database->transaction(function (Database $db) use ($beneficiaryId, $actorId, $isAdmin): void {
             $row = $db->fetchOne('SELECT * FROM saved_beneficiaries WHERE id = ?', [$beneficiaryId]);
             if (!$row || $row['status'] !== 'active') {

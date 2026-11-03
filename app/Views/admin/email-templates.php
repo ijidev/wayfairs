@@ -17,6 +17,8 @@ $placeholders = [
 <header class="page-header">
   <div class="page-heading"><span class="page-icon"><?= wayfairs_icon('invoice') ?></span><div class="page-heading-copy"><span class="page-kicker">Delivery</span><h1>Email templates</h1><p>Draft the messages sent for each event. Placeholders in braces are filled in at send time.</p></div></div>
 </header>
+</header>
+
 
 <?php foreach ($templates as $template): $key = (string) $template['template_key']; ?>
 <section class="card settings-section static">

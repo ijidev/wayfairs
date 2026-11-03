@@ -32,9 +32,6 @@ final class Restrictions
 
     public function apply(string $userId, string $capability, string $reasonCode, string $reason, string $createdBy, ?string $expiresAt = null): void
     {
-        if (\Wayfairs\Core\Context::isImpersonating()) {
-            throw new \RuntimeException('Capability changes are disabled during impersonation.');
-        }
         $this->database->execute(
             'INSERT INTO capability_restrictions (id, user_id, capability, reason_code, reason, starts_at, expires_at, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
             [Security::uuid(), $userId, $capability, $reasonCode, $reason, gmdate('Y-m-d H:i:s.u'), $expiresAt, $createdBy]
@@ -43,9 +40,6 @@ final class Restrictions
 
     public function release(string $restrictionId, string $reason, string $releasedBy): void
     {
-        if (\Wayfairs\Core\Context::isImpersonating()) {
-            throw new \RuntimeException('Capability changes are disabled during impersonation.');
-        }
         $this->database->execute(
             'UPDATE capability_restrictions SET released_at = ?, released_by = ?, release_reason = ? WHERE id = ? AND released_at IS NULL',
             [gmdate('Y-m-d H:i:s.u'), $releasedBy, $reason, $restrictionId]

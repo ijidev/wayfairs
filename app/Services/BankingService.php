@@ -25,6 +25,16 @@ final class BankingService
         return $asset;
     }
 
+    public function guardPublic(string $userId, array $account, string $capability): void
+    {
+        $this->guard($userId, $account, $capability);
+    }
+
+    public function positiveAmountPublic(string $amount, int $scale): int
+    {
+        return $this->positiveAmount($amount, $scale);
+    }
+
     public function accountFor(string $userId, string $assetCode): array
     {
         $asset = $this->assetByCode($assetCode);
@@ -79,7 +89,6 @@ final class BankingService
 
     public function verifyDeposit(string $depositId, string $adminId, bool $approve, string $remark, ?string $externalReference): void
     {
-        $this->assertNotImpersonating('Deposit decisions');
         $deposit = $this->database->fetchOne('SELECT * FROM deposit_requests WHERE id = ?', [$depositId]);
         if (!$deposit || $deposit['status'] !== 'pending') {
             throw new \RuntimeException('This deposit is no longer pending.');
@@ -302,7 +311,6 @@ final class BankingService
 
     public function approveWithdrawal(string $withdrawalId, string $adminId, bool $approve, string $remark, ?string $externalReference): void
     {
-        $this->assertNotImpersonating('Withdrawal decisions');
         $request = $this->database->fetchOne('SELECT * FROM withdrawal_requests WHERE id = ?', [$withdrawalId]);
         if (!$request || !in_array((string) $request['status'], ['pending', 'approved'], true)) {
             throw new \RuntimeException('This withdrawal is no longer actionable.');
@@ -390,7 +398,6 @@ final class BankingService
 
     public function adminAdjustBalance(string $adminId, string $userId, string $accountId, string $direction, string $amount, string $remark, string $idempotencyToken): array
     {
-        $this->assertNotImpersonating('Administrative balance adjustments');
         $admin = $this->database->fetchOne("SELECT id FROM users WHERE id = ? AND role = 'admin' AND status = 'active'", [$adminId]);
         if (!$admin) {
             throw new \RuntimeException('An active administrator account is required.');
@@ -588,7 +595,6 @@ final class BankingService
 
     private function guard(string $userId, array $account, string $capability): void
     {
-        $this->assertNotImpersonating('Money movement and security changes');
         $user = $this->database->fetchOne('SELECT status FROM users WHERE id = ?', [$userId]);
         if (!$user || $user['status'] !== 'active') {
             throw new \RuntimeException('This account is not active.');
@@ -602,13 +608,6 @@ final class BankingService
         }
         if (!(new Restrictions($this->database))->can($userId, $capability)) {
             throw new \RuntimeException('This action is restricted on your account. Contact support.');
-        }
-    }
-
-    private function assertNotImpersonating(string $action): void
-    {
-        if (Context::isImpersonating()) {
-            throw new \RuntimeException($action . ' are disabled during impersonation.');
         }
     }
 

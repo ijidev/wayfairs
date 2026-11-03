@@ -15,6 +15,8 @@ $configuredCount = count(array_filter($assets, static function (array $asset): b
   <div class="page-heading"><span class="page-icon"><?= wayfairs_icon('layers') ?></span><div class="page-heading-copy"><span class="page-kicker">Currency operations</span><h1>Currencies</h1><p>Control customer availability, limits, fees, and the exact deposit destinations published for each asset.</p></div></div>
   <div class="page-actions"><form method="post" action="<?= e(wayfairs_url('/admin/assets/rates/refresh')) ?>"><input type="hidden" name="_token" value="<?= e(wayfairs_csrf()) ?>" /><button class="btn ghost" type="submit"><?= wayfairs_icon('activity') ?> Refresh USD rates</button></form><a class="btn ghost" href="<?= e(wayfairs_url('/admin/transactions')) ?>">Transactions</a></div>
 </header>
+</header>
+
 
 <section class="metric-grid">
   <div class="metric-card"><span class="metric-icon"><?= wayfairs_icon('layers') ?></span><span class="metric-copy"><strong class="metric-value"><?= count($assets) ?></strong><span class="metric-label">Configured currencies</span></span></div>
@@ -57,7 +59,7 @@ $configuredCount = count(array_filter($assets, static function (array $asset): b
     <details class="asset-editor">
       <summary>
         <span class="asset-summary-main"><span class="mark"><?= e(mb_substr((string) $asset['code'], 0, 2)) ?></span><span class="asset-summary-copy"><strong><?= e((string) $asset['name']) ?> · <?= e((string) $asset['code']) ?></strong><span><?= e(ucfirst((string) $asset['asset_type'])) ?> · <?= (int) $asset['scale'] ?> decimals · symbol <?= e((string) $asset['symbol']) ?></span></span></span>
-        <span class="asset-summary-state"><?= wayfairs_pill((int) $asset['enabled'] === 1 ? 'active' : 'closed') ?><?= wayfairs_pill((string) ($rate['status'] ?? 'unavailable')) ?><?= $missingDestination ? wayfairs_pill('blocked') : '' ?><span class="btn small ghost">Edit</span></span>
+        <span class="asset-summary-state"><?= wayfairs_pill((int) $asset['enabled'] === 1 ? 'active' : 'closed') ?><span class="btn small ghost">Edit</span></span>
       </summary>
       <div class="asset-editor-body">
         <?php if ($missingDestination): ?><div class="notice warn"><?= wayfairs_icon('info') ?><div><strong>Deposits are open without a complete destination</strong><p>Customers see a warning until the required <?= $isFiat ? 'bank name and account number' : 'network and wallet address' ?> are saved.</p></div></div><?php endif; ?>

@@ -1129,11 +1129,26 @@ return function (Router $router, Database $database): void {
         }, 'Email template saved.', '/admin/email-templates');
     }, 'admin', true);
 
-    $router->get('/admin/settings', static function () use ($admin, $database): void {
+    $router->get('/admin/settings', static function () use ($admin, $database, $rates, $mailer, $emailTemplates, $otp, $swaps): void {
+        $settings = new SiteSettings($database);
+        $smtpValues = [];
+        foreach (['smtp.host', 'smtp.port', 'smtp.username', 'smtp.encryption', 'smtp.from_email', 'smtp.from_name', 'smtp.verify_peer'] as $key) {
+            $smtpValues[$key] = $settings->get($key, '');
+        }
+        $assets = $database->fetchAll('SELECT * FROM assets ORDER BY code');
+        $rateAssets = $database->fetchAll('SELECT id, code, asset_type, usd_provider_reference FROM assets ORDER BY code');
         $admin('admin/settings', [
             'values' => wayfairs_public_settings(),
             'bankTransfersEnabled' => Features::enabled($database, Features::BANK_TRANSFERS),
             'missingExtensions' => Security::missingServerExtensions(),
+            'assets' => $assets,
+            'usdRates' => $rates->ratesForAssets($rateAssets),
+            'otpEnabled' => $otp->isEnabled(),
+            'smtpValues' => $smtpValues,
+            'mailer' => $mailer,
+            'templates' => $emailTemplates->all(),
+            'swapsEnabled' => $swaps->isEnabled(),
+            'swapFeePercent' => $swaps->feePercent(),
         ]);
     }, 'admin');
 

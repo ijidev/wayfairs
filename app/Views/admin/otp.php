@@ -5,6 +5,8 @@ declare(strict_types=1);
 <header class="page-header">
   <div class="page-heading"><span class="page-icon"><?= wayfairs_icon('security') ?></span><div class="page-heading-copy"><span class="page-kicker">Security</span><h1>Verification codes</h1><p>When enabled, customers must enter a code sent to their email before a transfer or bill payment is sent.</p></div></div>
 </header>
+</header>
+
 
 <section class="card settings-section static">
   <div class="settings-section-copy"><span class="page-icon"><?= wayfairs_icon('security') ?></span><h2>One-time codes</h2><p>Off by default. Turn on only after SMTP is configured and tested.</p></div>

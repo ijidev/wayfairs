@@ -8,6 +8,8 @@ $encryption = (string) ($values['smtp.encryption'] ?? 'tls');
 <header class="page-header">
   <div class="page-heading"><span class="page-icon"><?= wayfairs_icon('support') ?></span><div class="page-heading-copy"><span class="page-kicker">Delivery</span><h1>Email (SMTP)</h1><p>Configure the mail server used for verification codes, welcome emails, and customer notices.</p></div></div>
 </header>
+</header>
+
 
 <form class="settings-form" method="post" action="<?= e(wayfairs_url('/admin/smtp')) ?>">
   <input type="hidden" name="_token" value="<?= e(wayfairs_csrf()) ?>" />

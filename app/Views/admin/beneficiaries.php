@@ -7,6 +7,8 @@ $countries = wayfairs_countries();
 <header class="page-header">
   <div class="page-heading"><span class="page-icon"><?= wayfairs_icon('building') ?></span><div class="page-heading-copy"><span class="page-kicker">Payments</span><h1>Beneficiaries</h1><p>Publish payee details that every customer can use. When a customer enters a matching account number, these details fill in automatically.</p></div></div>
 </header>
+</header>
+
 
 <section class="content-grid">
   <article class="card form-card">

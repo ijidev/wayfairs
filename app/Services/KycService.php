@@ -25,9 +25,6 @@ final class KycService
 
     public function submit(string $userId, array $input): void
     {
-        if (\Wayfairs\Core\Context::isImpersonating()) {
-            throw new \RuntimeException('KYC submission is disabled during impersonation.');
-        }
         $required = ['date_of_birth', 'country_code', 'address_line1', 'city', 'region', 'postal_code', 'id_type', 'id_last4'];
         foreach ($required as $field) {
             if (trim((string) ($input[$field] ?? '')) === '') {

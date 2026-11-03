@@ -35,9 +35,6 @@ final class FlightService
 
     public function create(string $userId, array $input, string $idempotencyToken): array
     {
-        if (Context::isImpersonating()) {
-            throw new RuntimeException('Flight requests are disabled during impersonation.');
-        }
         $user = $this->database->fetchOne('SELECT status FROM users WHERE id = ?', [$userId]);
         if (!$user || $user['status'] !== 'active') {
             throw new RuntimeException('This account is not active.');
@@ -111,9 +108,6 @@ final class FlightService
 
     public function decide(string $requestId, string $status, string $adminNote, string $adminId): void
     {
-        if (Context::isImpersonating()) {
-            throw new RuntimeException('Flight decisions are disabled during impersonation.');
-        }
         if (!in_array($status, self::STATUSES, true)) {
             throw new RuntimeException('Choose a valid status.');
         }

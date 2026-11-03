@@ -14,6 +14,8 @@ $nextStatuses = [
 <header class="page-header">
   <div class="page-heading"><span class="page-icon"><?= wayfairs_icon('globe') ?></span><div class="page-heading-copy"><span class="page-kicker">Utilities</span><h1>Flight requests</h1><p>Confirm availability and price with the customer, then record the outcome here.</p></div></div>
 </header>
+</header>
+
 
 <section class="card table-card static">
   <div class="panel-head"><div><h2>Requests</h2><p>Newest open requests appear first.</p></div><span class="pill"><?= count($requests) ?> loaded</span></div>
