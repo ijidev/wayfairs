@@ -1063,7 +1063,7 @@ return function (Router $router, Database $database): void {
 
     $router->post('/admin/settings', static function (Request $request) use ($settings, $audit, $attempt): never {
         $attempt(static function () use ($settings, $audit, $request): void {
-            $keys = ['site.name', 'site.tagline', 'site.support_email', 'site.support_phone', 'site.address', 'site.primary_color', 'site.accent_color', 'site.deposit_instructions_fiat', 'site.deposit_instructions_crypto', 'site.withdrawal_notice', 'site.kyc_notice', 'site.footer'];
+            $keys = ['site.name', 'site.tagline', 'site.support_email', 'site.support_phone', 'site.address', 'site.primary_color', 'site.accent_color', 'site.deposit_instructions_fiat', 'site.deposit_instructions_crypto', 'site.withdrawal_notice', 'site.kyc_notice', 'site.footer', 'site.smartsupp_key'];
             $values = [];
             foreach ($keys as $key) {
                 $value = trim((string) $request->post(str_replace('.', '_', $key), ''));

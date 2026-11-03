@@ -58,5 +58,6 @@ $footerMode = 'guest';
   <main id="main-content" class="guest-main <?= $isHome ? 'marketing-main' : 'auth-main' ?>"><?= $content ?></main>
   <?php require WAYFAIRS_ROOT . '/app/Views/partials/footer.php'; ?>
   <?php require WAYFAIRS_ROOT . '/app/Views/partials/ui-scripts.php'; ?>
+  <?php require WAYFAIRS_ROOT . '/app/Views/partials/live-chat.php'; ?>
 </body>
 </html>

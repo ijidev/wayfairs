@@ -117,5 +117,6 @@ $footerMode = 'compact';
     <?php require WAYFAIRS_ROOT . '/app/Views/partials/footer.php'; ?>
   </div>
   <?php require WAYFAIRS_ROOT . '/app/Views/partials/ui-scripts.php'; ?>
+  <?php require WAYFAIRS_ROOT . '/app/Views/partials/live-chat.php'; ?>
 </body>
 </html>

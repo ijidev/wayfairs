@@ -53,6 +53,14 @@ declare(strict_types=1);
     </div>
   </section>
 
+  <section class="card settings-section static">
+    <div class="settings-section-copy"><span class="page-icon"><?= wayfairs_icon('support') ?></span><h2>Live chat</h2><p>Paste your Smartsupp widget key to enable live chat on customer and public pages. Leave blank to disable.</p></div>
+    <div class="settings-fields">
+      <label>Smartsupp key<input name="site_smartsupp_key" value="<?= e($values['site.smartsupp_key'] ?? '') ?>" maxlength="120" placeholder="abc123..." /></label>
+      <p class="field-hint">Find the key in your Smartsupp dashboard under Settings → Widget.</p>
+    </div>
+  </section>
+
   <div class="receipt-footnote"><?= wayfairs_icon('audit') ?><span>Saving creates an administrative audit event listing the updated setting keys.</span></div>
   <div class="form-actions"><button class="btn" type="submit">Save site information</button></div>
 </form>
