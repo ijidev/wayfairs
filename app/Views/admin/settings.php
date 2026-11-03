@@ -5,6 +5,9 @@ declare(strict_types=1);
 <header class="page-header">
   <div class="page-heading"><span class="page-icon"><?= wayfairs_icon('settings') ?></span><div class="page-heading-copy"><span class="page-kicker">Public configuration</span><h1>Site information</h1><p>Manage the brand, support details, and customer-facing notices stored by Wayfairs.</p></div></div>
 </header>
+</header>
+
+<?php require WAYFAIRS_ROOT . '/app/Views/partials/settings-tabs.php'; ?>
 
 <?php $missingExtensions = $missingExtensions ?? []; $canEnable = $missingExtensions === []; $bankTransfersEnabled = (bool) ($bankTransfersEnabled ?? false); ?>
 <section class="card settings-section static">
@@ -26,19 +29,10 @@ declare(strict_types=1);
   </div>
 </section>
 
-<nav class="settings-tabs" role="tablist" aria-label="Settings sections">
-  <button type="button" class="settings-tab active" data-tab="brand" role="tab" aria-selected="true">Brand</button>
-  <button type="button" class="settings-tab" data-tab="support" role="tab" aria-selected="false">Support</button>
-  <button type="button" class="settings-tab" data-tab="notices" role="tab" aria-selected="false">Notices</button>
-  <button type="button" class="settings-tab" data-tab="chat" role="tab" aria-selected="false">Live chat</button>
-  <button type="button" class="settings-tab" data-tab="trading" role="tab" aria-selected="false">Trading</button>
-</nav>
-
 <form class="settings-form" method="post" action="<?= e(wayfairs_url('/admin/settings')) ?>">
   <input type="hidden" name="_token" value="<?= e(wayfairs_csrf()) ?>" />
 
-  <div class="settings-panel" data-panel="brand">
-    <section class="card settings-section static">
+  <section class="card settings-section static">
       <div class="settings-section-copy"><span class="page-icon"><?= wayfairs_icon('building') ?></span><h2>Brand identity</h2><p>The name, tagline, and colours used throughout public and authenticated pages.</p></div>
       <div class="settings-fields">
         <div class="form-grid"><label>Bank name<input name="site_name" value="<?= e($values['site.name'] ?? 'Wayfairs') ?>" required maxlength="120" /></label><label>Tagline<input name="site_tagline" value="<?= e($values['site.tagline'] ?? '') ?>" maxlength="200" /></label></div>
@@ -48,14 +42,12 @@ declare(strict_types=1);
     </section>
   </div>
 
-  <div class="settings-panel" data-panel="support" hidden>
-    <section class="card settings-section static">
+  <section class="card settings-section static">
       <div class="settings-section-copy"><span class="page-icon"><?= wayfairs_icon('support') ?></span><h2>Support contact</h2><p>Public support channels displayed in the sidebar and footer.</p></div>
       <div class="settings-fields"><div class="form-grid"><label>Support email<input type="email" name="site_support_email" value="<?= e($values['site.support_email'] ?? '') ?>" /></label><label>Support phone<input name="site_support_phone" value="<?= e($values['site.support_phone'] ?? '') ?>" maxlength="40" /></label></div><label>Registered or support address<textarea name="site_address" rows="3" maxlength="1000"><?= e($values['site.address'] ?? '') ?></textarea></label></div>
     </section>
   </div>
 
-  <div class="settings-panel" data-panel="notices" hidden>
     <section class="card settings-section static">
       <div class="settings-section-copy"><span class="page-icon"><?= wayfairs_icon('info') ?></span><h2>Customer notices</h2><p>Operational wording shown around deposits, withdrawals, verification, and the public footer.</p></div>
       <div class="settings-fields">
@@ -68,7 +60,6 @@ declare(strict_types=1);
     </section>
   </div>
 
-  <div class="settings-panel" data-panel="chat" hidden>
     <section class="card settings-section static">
       <div class="settings-section-copy"><span class="page-icon"><?= wayfairs_icon('support') ?></span><h2>Live chat</h2><p>Paste your Smartsupp widget key to enable live chat on customer and public pages. Leave blank to disable.</p></div>
       <div class="settings-fields">
@@ -78,7 +69,6 @@ declare(strict_types=1);
     </section>
   </div>
 
-  <div class="settings-panel" data-panel="trading" hidden>
     <section class="card settings-section static">
       <div class="settings-section-copy"><span class="page-icon"><?= wayfairs_icon('layers') ?></span><h2>Currency swaps</h2><p>Allow customers to convert between their own currency balances. Swaps are instant.</p></div>
       <div class="settings-fields">
@@ -87,20 +77,9 @@ declare(strict_types=1);
         <p class="field-hint">Fee is taken from the amount being converted. Enter a number between 0 and 10.</p>
       </div>
     </section>
-  </div>
 
   <div class="receipt-footnote"><?= wayfairs_icon('audit') ?><span>Saving creates an administrative audit event listing the updated setting keys.</span></div>
   <div class="form-actions"><button class="btn" type="submit">Save site information</button></div>
 </form>
 
-<script>
-(function () {
-  var tabs = document.querySelectorAll('.settings-tab');
-  var panels = document.querySelectorAll('.settings-panel');
-  function show(name) {
-    tabs.forEach(function (tab) { var active = tab.getAttribute('data-tab') === name; tab.classList.toggle('active', active); tab.setAttribute('aria-selected', active ? 'true' : 'false'); });
-    panels.forEach(function (panel) { panel.hidden = panel.getAttribute('data-panel') !== name; });
-  }
-  tabs.forEach(function (tab) { tab.addEventListener('click', function () { show(tab.getAttribute('data-tab')); }); });
-})();
-</script>
+
