@@ -48,11 +48,25 @@ if (!array_key_exists($activePanel, $panels)) {
   <?php if ($accounts === []): ?>
     <div class="empty-state"><div class="empty-icon"><?= wayfairs_icon('wallet') ?></div><h3>No currency accounts</h3><p>No customer accounts have been opened.</p></div>
   <?php else: ?>
-    <div class="asset-summary-grid">
-      <?php foreach ($accounts as $account): $held = (int) ($account['held_minor'] ?? 0); $available = (int) $account['available_minor']; $rate = $usdRates[$account['code']] ?? null; ?>
-        <article class="asset-summary account-admin-card"><div class="asset-summary-top"><span class="asset-summary-code"><?= e((string) $account['code']) ?></span><?= wayfairs_pill((string) $account['status']) ?></div><strong><?= e(wayfairs_amount($available, (int) $account['scale'], (string) $account['symbol'], (string) $account['code'])) ?></strong><small><?= e(wayfairs_usd_equivalent($available + $held, (int) $account['scale'], $rate)) ?> total equivalent</small><small>Available · <?= e(wayfairs_amount($held, (int) $account['scale'], (string) $account['symbol'])) ?> reserved</small><small class="mono"><?= e((string) $account['account_number']) ?></small><form class="stack account-status-form" method="post" action="<?= e(wayfairs_url('/admin/users/' . $profile['id'] . '/accounts/' . $account['id'] . '/status')) ?>"><input type="hidden" name="_token" value="<?= e(wayfairs_csrf()) ?>" /><label>Account access<select name="status"><option value="active" <?= $account['status'] === 'active' ? 'selected' : '' ?>>Active</option><option value="restricted" <?= $account['status'] === 'restricted' ? 'selected' : '' ?>>Restricted</option><option value="frozen" <?= $account['status'] === 'frozen' ? 'selected' : '' ?>>Frozen</option><option value="closed" <?= $account['status'] === 'closed' ? 'selected' : '' ?>>Closed</option></select></label><label>Remark <span class="field-hint">Optional</span><input name="admin_remark" maxlength="500" /></label><button class="btn small ghost" type="submit">Update account</button></form></article>
-      <?php endforeach; ?>
-    </div>
+    <div class="table-wrap"><table class="compact-accounts"><thead><tr><th>Currency</th><th>Status</th><th>Available</th><th>Reserved</th><th>Account number</th><th>Access</th></tr></thead><tbody>
+    <?php foreach ($accounts as $account): $held = (int) ($account['held_minor'] ?? 0); $available = (int) $account['available_minor']; $rate = $usdRates[$account['code']] ?? null; ?>
+      <tr>
+        <td data-label="Currency"><span class="cell-title"><?= e((string) $account['code']) ?></span><span class="cell-subtitle"><?= e((string) $account['name'] ?? '') ?></span></td>
+        <td data-label="Status"><?= wayfairs_pill((string) $account['status']) ?></td>
+        <td data-label="Available" class="cell-amount"><?= e(wayfairs_amount($available, (int) $account['scale'], (string) $account['symbol'], (string) $account['code'])) ?></td>
+        <td data-label="Reserved" class="cell-amount"><?= e(wayfairs_amount($held, (int) $account['scale'], (string) $account['symbol'])) ?></td>
+        <td data-label="Account" class="mono"><?= e((string) $account['account_number']) ?></td>
+        <td data-label="Access">
+          <form class="inline-form" method="post" action="<?= e(wayfairs_url('/admin/users/' . $profile['id'] . '/accounts/' . $account['id'] . '/status')) ?>">
+            <input type="hidden" name="_token" value="<?= e(wayfairs_csrf()) ?>" />
+            <select name="status"><option value="active" <?= $account['status'] === 'active' ? 'selected' : '' ?>>Active</option><option value="restricted" <?= $account['status'] === 'restricted' ? 'selected' : '' ?>>Restricted</option><option value="frozen" <?= $account['status'] === 'frozen' ? 'selected' : '' ?>>Frozen</option><option value="closed" <?= $account['status'] === 'closed' ? 'selected' : '' ?>>Closed</option></select>
+            <input name="admin_remark" maxlength="120" placeholder="Remark" />
+            <button class="btn small ghost" type="submit">Save</button>
+          </form>
+        </td>
+      </tr>
+    <?php endforeach; ?>
+    </tbody></table></div>
   <?php endif; ?>
 </section>
 <?php endif; ?>
