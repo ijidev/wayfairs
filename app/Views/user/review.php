@@ -57,8 +57,12 @@ $back = $isBill ? '/bills' : '/transfer';
 
 <div class="notice warn"><?= wayfairs_icon('info') ?><div><strong>Check every detail</strong><p>The amount is held as soon as you confirm. Make sure the name, bank, and account number match the beneficiary's records.</p></div></div>
 
+<?php if (empty($hasPin)): ?>
+<div class="notice warn"><?= wayfairs_icon('security') ?><div><strong>Set a transaction PIN first</strong><p>Payments need your 4–6 digit transaction PIN. <a href="<?= e(wayfairs_url('/security')) ?>">Set it in Security</a>.</p></div></div>
+<?php endif; ?>
 <form class="review-actions" method="post" action="<?= e(wayfairs_url($isBill ? '/bills/confirm' : '/transfer/confirm')) ?>">
   <input type="hidden" name="_token" value="<?= e(wayfairs_csrf()) ?>" />
+    <label class="pin-field">Transaction PIN<input type="password" name="pin" inputmode="numeric" pattern="[0-9]{4,6}" maxlength="6" autocomplete="off" required placeholder="••••" /></label>
   <a class="btn ghost" href="<?= e(wayfairs_url($back)) ?>">Edit details</a>
   <button class="btn" type="submit"><?= $isBill ? 'Confirm and pay bill' : 'Confirm and send' ?> <?= wayfairs_icon('arrow-right', 'btn-icon') ?></button>
 </form>

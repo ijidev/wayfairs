@@ -285,3 +285,13 @@ original design. Applied migrations are not edited, so the new table is
 Known limits: lookups are not yet rate-limited, so a customer could try many account
 numbers. Matching is exact and returns only the holder name and bank, but a limit
 should be added before public launch.
+
+## WDR-022 — Forgot password and transaction PIN
+
+Date: 2026-11-04
+
+Forgot password: a reset link carries a random single-use token. Only its SHA-256 hash is stored, it expires after 30 minutes, and requesting a new link invalidates older ones. The request page gives the same answer whether or not the email exists. A completed reset ends every existing session. Minimum password length is 12, matching registration.
+
+Transaction PIN: 4 to 6 digits, stored as a password hash, set only after the account password is confirmed. Five wrong PINs lock PIN checks for 15 minutes. The PIN is required to confirm bank transfers, bill payments, swaps, and Wayfairs transfers. A wrong PIN keeps the review open so the customer can retry.
+
+Known limits: neither /forgot nor PIN entry has a rate limit beyond the PIN lockout. A 4-digit PIN has only 10,000 combinations, so 6 digits are recommended. Reset emails need SMTP to be configured and tested. The reset response takes slightly longer when an email is actually sent, which is a minor way to infer that an account exists; a queue would remove it.

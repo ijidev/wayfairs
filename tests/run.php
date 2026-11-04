@@ -99,7 +99,7 @@ $check('transfer form offers one banking route at a time', substr_count($transfe
 
 $database = new Database(['driver' => 'sqlite', 'path' => $directory . '/test.sqlite']);
 $applied = (new Migrator($database))->migrate();
-$check('migrations apply once', $applied === ['001_core', '002_asset_deposit_details', '003_bank_transfers_and_usd_rates', '004_bill_payments_and_open_limits', '005_flight_requests', '006_beneficiaries', '007_otp_and_email', '008_professional_emails', '010_swaps']);
+$check('migrations apply once', $applied === ['001_core', '002_asset_deposit_details', '003_bank_transfers_and_usd_rates', '004_bill_payments_and_open_limits', '005_flight_requests', '006_beneficiaries', '007_otp_and_email', '008_professional_emails', '010_swaps', '011_password_reset_and_pin']);
 $check('migrations are idempotent', (new Migrator($database))->migrate() === []);
 // A migration whose columns were added before its bookkeeping row was written
 // (an interrupted deploy) must finish on the next request instead of failing.
@@ -363,6 +363,38 @@ $check('a customer cannot archive an admin beneficiary', $expectThrows(static fn
 $ownSaved = $database->fetchOne("SELECT id FROM saved_beneficiaries WHERE owner_key = ? AND scope = 'user'", [(string) $alice['id']]);
 $beneficiaries->archive((string) $ownSaved['id'], (string) $alice['id'], false);
 $check('archived beneficiary stops matching', $beneficiaries->findForUser((string) $alice['id'], 'iban', 'GB33BUKB20201555555555') === null);
+
+// Forgot password: single-use tokens, expiry, and sessions ended on reset.
+$resetUser = $register('reset@test.local');
+$resetSession = $auth->createSession((string) $resetUser['id']);
+$check('unknown email issues no reset token', $auth->issuePasswordReset('nobody@test.local', '127.0.0.1') === null);
+$issued = $auth->issuePasswordReset('reset@test.local', '127.0.0.1');
+$check('known email issues a reset token', is_array($issued) && strlen((string) $issued['token']) >= 40);
+$check('reset token is not stored in plain text', !str_contains(json_encode($database->fetchAll('SELECT * FROM password_resets')), (string) $issued['token']));
+$expiredIssue = $auth->issuePasswordReset('reset@test.local', '127.0.0.1');
+$check('a newer request invalidates the older token', $expectThrows(static fn () => $auth->resetPassword((string) $issued['token'], 'brand-new-password-1'), 'invalid'));
+$check('short replacement password is refused', $expectThrows(static fn () => $auth->resetPassword((string) $expiredIssue['token'], 'short'), 'at least 12'));
+$database->execute("UPDATE password_resets SET expires_at = ? WHERE token_hash = ?", [gmdate('Y-m-d H:i:s.u', time() - 60), \Wayfairs\Core\Security::hashToken((string) $expiredIssue['token'])]);
+$check('an expired token is refused', $expectThrows(static fn () => $auth->resetPassword((string) $expiredIssue['token'], 'brand-new-password-1'), 'invalid'));
+$freshIssue = $auth->issuePasswordReset('reset@test.local', '127.0.0.1');
+$auth->resetPassword((string) $freshIssue['token'], 'brand-new-password-1');
+$check('reset replaces the password', $auth->authenticate('reset@test.local', 'brand-new-password-1', '127.0.0.1') !== null && $auth->authenticate('reset@test.local', 'customer-password-123', '127.0.0.1') === null);
+$check('reset token works once only', $expectThrows(static fn () => $auth->resetPassword((string) $freshIssue['token'], 'another-password-2'), 'invalid'));
+$check('reset ends existing sessions', $auth->sessionUser($resetSession) === null);
+
+// Transaction PIN: set with the account password, wrong attempts lock it.
+$pinUser = $register('pin@test.local');
+$check('no PIN is set by default', $auth->hasTransactionPin((string) $pinUser['id']) === false);
+$check('PIN refused without the account password', $expectThrows(static fn () => $auth->setTransactionPin((string) $pinUser['id'], 'wrong-password-xyz', '1234'), 'password'));
+$check('PIN must be 4 to 6 digits', $expectThrows(static fn () => $auth->setTransactionPin((string) $pinUser['id'], 'customer-password-123', '12'), '4 to 6'));
+$auth->setTransactionPin((string) $pinUser['id'], 'customer-password-123', '482913');
+$check('PIN is stored hashed, not in plain text', !str_contains((string) $database->fetchOne('SELECT transaction_pin_hash AS h FROM users WHERE id = ?', [(string) $pinUser['id']])['h'], '482913'));
+$check('payments refused until a PIN is set', $expectThrows(static fn () => (new \Wayfairs\Services\AuthService($database))->verifyTransactionPin((string) $alice['id'], '1234'), 'Set a transaction PIN'));
+$check('correct PIN accepted', $auth->verifyTransactionPin((string) $pinUser['id'], '482913') === true);
+for ($wrong = 0; $wrong < 4; $wrong++) { $auth->verifyTransactionPin((string) $pinUser['id'], '000000'); }
+$check('four wrong PINs do not lock yet', $auth->verifyTransactionPin((string) $pinUser['id'], '482913') === true);
+for ($wrong = 0; $wrong < 5; $wrong++) { $auth->verifyTransactionPin((string) $pinUser['id'], '000000'); }
+$check('five wrong PINs lock the PIN, even when correct', $expectThrows(static fn () => $auth->verifyTransactionPin((string) $pinUser['id'], '482913'), 'locked'));
 
 // Restriction enforcement and impersonation guard.
 (new \Wayfairs\Services\Restrictions($database))->apply((string) $alice['id'], 'internal_transfer', 'manual_review', 'Test restriction for verification', $adminId, null);

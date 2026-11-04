@@ -743,6 +743,39 @@ INSERT IGNORE INTO site_settings (setting_key, setting_value, is_public) VALUES
   ('swap.enabled', '0', 0),
   ('swap.fee_percent', '0.5', 0);
 
+-- ==== migration 011_password_reset_and_pin (source: 011_password_reset_and_pin.sql) ====
+-- Single-use password reset tokens. Only a hash of the token is stored.
+CREATE TABLE password_resets (
+  id CHAR(36) CHARACTER SET ascii COLLATE ascii_bin PRIMARY KEY,
+  user_id CHAR(36) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+  token_hash CHAR(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL UNIQUE,
+  expires_at DATETIME(6) NOT NULL,
+  used_at DATETIME(6) NULL,
+  created_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+  ip VARCHAR(45) CHARACTER SET ascii COLLATE ascii_bin NULL,
+  CONSTRAINT password_resets_user_fk FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE RESTRICT,
+  KEY password_resets_user_idx (user_id, created_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Transaction PIN: stored as a password hash, with its own lockout counter.
+ALTER TABLE users
+  ADD COLUMN transaction_pin_hash VARCHAR(255) CHARACTER SET ascii COLLATE ascii_bin NULL,
+  ADD COLUMN pin_failed_attempts INT UNSIGNED NOT NULL DEFAULT 0,
+  ADD COLUMN pin_locked_until DATETIME(6) NULL;
+
+INSERT IGNORE INTO email_templates (id, template_key, subject, body) VALUES
+(UUID(), 'password_reset', 'Reset your Wayfairs password', 'Dear {first_name},
+
+We received a request to reset the password on your Wayfairs account.
+
+Use this link to choose a new password. It can be used once and expires in {minutes} minutes:
+{reset_url}
+
+If you did not request this, you can ignore this message. Your password will not change.
+
+Regards,
+Wayfairs');
+
 -- ==== migration ledger (matches the application checksums) ====
 INSERT INTO schema_migrations (version, checksum, applied_at) VALUES
     ('001_core', 'b005c9d14426caf95b8834c76c94d86a01ae14210a33766935160f30e67df25e', UTC_TIMESTAMP(6)),
@@ -753,4 +786,5 @@ INSERT INTO schema_migrations (version, checksum, applied_at) VALUES
     ('006_beneficiaries', 'b60911b44ed0a4cc2ff656625bb6a63c4f4f3c0034c1f2d12dd1b47ace68ef1b', UTC_TIMESTAMP(6)),
     ('007_otp_and_email', '4973a91448907c47f7382cf3c04bae30099ce9a13fc042f0078b6d86b9c18665', UTC_TIMESTAMP(6)),
     ('008_professional_emails', '1a16aa3b5e419310d13341af41d5225973e588d72b04358c21b8830160a2c592', UTC_TIMESTAMP(6)),
-    ('010_swaps', 'c682a1af76a11b8aa1fc5723a5bbb9cc61a4bf60b984e7a3e78b358503818a4c', UTC_TIMESTAMP(6));
+    ('010_swaps', 'c682a1af76a11b8aa1fc5723a5bbb9cc61a4bf60b984e7a3e78b358503818a4c', UTC_TIMESTAMP(6)),
+    ('011_password_reset_and_pin', '8869b73fd8566d5136a27e50cce1d7f69e9ccac5662d85a7ecc2f57b1363175b', UTC_TIMESTAMP(6));

@@ -24,8 +24,12 @@ $to = $p['to_asset'];
 
 <div class="notice warn"><?= wayfairs_icon('info') ?><div><strong>Check the amounts</strong><p>The conversion is instant and cannot be reversed once confirmed.</p></div></div>
 
+<?php if (empty($hasPin)): ?>
+<div class="notice warn"><?= wayfairs_icon('security') ?><div><strong>Set a transaction PIN first</strong><p>Payments need your 4–6 digit transaction PIN. <a href="<?= e(wayfairs_url('/security')) ?>">Set it in Security</a>.</p></div></div>
+<?php endif; ?>
 <form class="review-actions" method="post" action="<?= e(wayfairs_url('/swap/confirm')) ?>">
   <input type="hidden" name="_token" value="<?= e(wayfairs_csrf()) ?>" />
+    <label class="pin-field">Transaction PIN<input type="password" name="pin" inputmode="numeric" pattern="[0-9]{4,6}" maxlength="6" autocomplete="off" required placeholder="••••" /></label>
   <a class="btn ghost" href="<?= e(wayfairs_url('/swap')) ?>">Edit details</a>
   <button class="btn" type="submit">Confirm and swap <?= wayfairs_icon('arrow-right', 'btn-icon') ?></button>
 </form>

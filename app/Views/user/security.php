@@ -17,6 +17,20 @@ $restrictionCount = count($restrictions);
   <div class="metric-card"><span class="metric-icon"><?= wayfairs_icon('clock') ?></span><span class="metric-copy"><strong class="metric-value long"><?= e($profile['last_login_at'] ? wayfairs_datetime((string) $profile['last_login_at']) : '—') ?></strong><span class="metric-label">Last successful sign-in</span></span></div>
 </section>
 
+<section class="card form-card">
+  <div class="form-intro"><span class="page-kicker">Payments</span><h2>Transaction PIN</h2><p>Required to send transfers, bill payments, swaps, and Wayfairs transfers. Five wrong tries lock the PIN for 15 minutes.</p></div>
+  <p class="field-hint"><?= !empty($hasPin) ? 'A PIN is set. Enter your account password and a new PIN to change it.' : 'No transaction PIN is set yet. You cannot send money until you set one.' ?></p>
+  <form class="stack" method="post" action="<?= e(wayfairs_url('/security/pin')) ?>">
+    <input type="hidden" name="_token" value="<?= e(wayfairs_csrf()) ?>" />
+    <label>Account password<input type="password" name="current_password" autocomplete="current-password" required /></label>
+    <div class="form-grid">
+      <label>New PIN (4–6 digits)<input type="password" name="pin" inputmode="numeric" pattern="[0-9]{4,6}" maxlength="6" autocomplete="off" required /></label>
+      <label>Confirm PIN<input type="password" name="pin_confirm" inputmode="numeric" pattern="[0-9]{4,6}" maxlength="6" autocomplete="off" required /></label>
+    </div>
+    <div class="form-actions"><button class="btn" type="submit"><?= !empty($hasPin) ? 'Change PIN' : 'Set PIN' ?></button></div>
+  </form>
+</section>
+
 <section class="content-grid">
   <article class="card static">
     <div class="panel-head"><div><h2>Capability restrictions</h2><p>Restrictions stop the affected actions on your account until they are lifted.</p></div><span class="pill <?= $restrictionCount > 0 ? 'bad' : 'good' ?>"><?= $restrictionCount ?> active</span></div>

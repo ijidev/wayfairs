@@ -140,6 +140,95 @@ final class AuthService
         return $this->userById((string) $user['id']);
     }
 
+    /**
+     * Issues a single-use reset token. Returns null when no active account matches,
+     * so callers respond identically either way and never reveal whether an email exists.
+     */
+    public function issuePasswordReset(string $email, string $ip): ?array
+    {
+        $user = $this->database->fetchOne('SELECT id, first_name, email, status FROM users WHERE email_normalized = ?', [$this->normalizeEmail($email)]);
+        if (!$user || !in_array($user['status'], ['active', 'restricted', 'pending'], true)) {
+            return null;
+        }
+        $now = gmdate('Y-m-d H:i:s.u');
+        $this->database->execute('UPDATE password_resets SET used_at = ? WHERE user_id = ? AND used_at IS NULL', [$now, (string) $user['id']]);
+        $token = Security::token(32);
+        $this->database->execute(
+            'INSERT INTO password_resets (id, user_id, token_hash, expires_at, created_at, ip) VALUES (?, ?, ?, ?, ?, ?)',
+            [Security::uuid(), (string) $user['id'], Security::hashToken($token), gmdate('Y-m-d H:i:s.u', time() + 1800), $now, $ip]
+        );
+        return ['token' => $token, 'user' => $user];
+    }
+
+    public function resetPassword(string $token, string $newPassword): void
+    {
+        $row = $this->database->fetchOne(
+            'SELECT * FROM password_resets WHERE token_hash = ? AND used_at IS NULL AND expires_at > ?',
+            [Security::hashToken(trim($token)), gmdate('Y-m-d H:i:s.u')]
+        );
+        if (!$row) {
+            throw new \RuntimeException('This reset link is invalid or has expired. Request a new one.');
+        }
+        if (strlen($newPassword) < 12) {
+            throw new \RuntimeException('Use at least 12 characters for your new password.');
+        }
+        $now = gmdate('Y-m-d H:i:s.u');
+        $this->database->transaction(function (Database $db) use ($row, $newPassword, $now): void {
+            $db->execute('UPDATE password_resets SET used_at = ? WHERE id = ? AND used_at IS NULL', [$now, (string) $row['id']]);
+            $db->execute(
+                'UPDATE users SET password_hash = ?, failed_login_attempts = 0, locked_until = NULL, updated_at = ? WHERE id = ?',
+                [Security::passwordHash($newPassword), $now, (string) $row['user_id']]
+            );
+        });
+        // A reset ends every existing session, so a stolen session cannot survive it.
+        $this->revokeAllForUser((string) $row['user_id']);
+    }
+
+    /** Sets or replaces the transaction PIN after the account password is confirmed. */
+    public function setTransactionPin(string $userId, string $currentPassword, string $pin): void
+    {
+        $user = $this->database->fetchOne('SELECT password_hash FROM users WHERE id = ?', [$userId]);
+        if (!$user || !password_verify($currentPassword, (string) $user['password_hash'])) {
+            throw new \RuntimeException('Your account password is incorrect.');
+        }
+        if (preg_match('/^[0-9]{4,6}$/', $pin) !== 1) {
+            throw new \RuntimeException('Choose a PIN of 4 to 6 digits.');
+        }
+        $this->database->execute(
+            'UPDATE users SET transaction_pin_hash = ?, pin_failed_attempts = 0, pin_locked_until = NULL, updated_at = ? WHERE id = ?',
+            [Security::passwordHash($pin), gmdate('Y-m-d H:i:s.u'), $userId]
+        );
+    }
+
+    public function hasTransactionPin(string $userId): bool
+    {
+        $row = $this->database->fetchOne('SELECT transaction_pin_hash FROM users WHERE id = ?', [$userId]);
+        return $row !== null && (string) ($row['transaction_pin_hash'] ?? '') !== '';
+    }
+
+    /**
+     * Checks the transaction PIN. Five wrong attempts lock PIN checks for 15 minutes.
+     * Throws when no PIN is set or the PIN is locked; returns false for a wrong PIN.
+     */
+    public function verifyTransactionPin(string $userId, string $pin): bool
+    {
+        $user = $this->database->fetchOne('SELECT transaction_pin_hash, pin_failed_attempts, pin_locked_until FROM users WHERE id = ?', [$userId]);
+        if (!$user || (string) ($user['transaction_pin_hash'] ?? '') === '') {
+            throw new \RuntimeException('Set a transaction PIN in Security before sending money.');
+        }
+        if ($user['pin_locked_until'] && strtotime((string) $user['pin_locked_until']) > time()) {
+            throw new \RuntimeException('Transaction PIN is locked after too many attempts. Try again later.');
+        }
+        if (password_verify(trim($pin), (string) $user['transaction_pin_hash'])) {
+            $this->database->execute('UPDATE users SET pin_failed_attempts = 0, pin_locked_until = NULL WHERE id = ?', [$userId]);
+            return true;
+        }
+        $attempts = (int) $user['pin_failed_attempts'] + 1;
+        $lockedUntil = $attempts >= 5 ? gmdate('Y-m-d H:i:s.u', time() + 900) : null;
+        $this->database->execute('UPDATE users SET pin_failed_attempts = ?, pin_locked_until = ? WHERE id = ?', [$attempts, $lockedUntil, $userId]);
+        return false;
+    }
+
     public function createSession(string $userId, ?string $originalAdminId = null, ?string $impersonationReason = null, ?string $expiresAt = null): string
     {
         $token = Security::token(48);

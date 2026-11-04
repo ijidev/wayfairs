@@ -188,6 +188,21 @@ if (!array_key_exists($activePanel, $panels)) {
 <?php endif; ?>
 
 <?php if ($activePanel === 'internal'): ?>
+<section class="card form-card static">
+  <div class="form-intro"><span class="page-kicker">Wayfairs network</span><h2>Send to another customer</h2><p>Instant, between Wayfairs accounts. Enter your transaction PIN to send.</p></div>
+  <form class="stack" method="post" action="<?= e(wayfairs_url('/transfer/internal')) ?>">
+    <input type="hidden" name="_token" value="<?= e(wayfairs_csrf()) ?>" /><input type="hidden" name="idem" value="<?= e(wayfairs_idem()) ?>" />
+    <label>Customer email<input type="email" name="recipient_email" placeholder="customer@example.com" required <?= $disabled ?> /></label>
+    <div class="form-grid">
+      <label>Currency<select name="asset_code" required <?= $disabled ?>><?php foreach ($accounts as $account): $asset = $account['asset']; ?><option value="<?= e((string) $asset['code']) ?>" <?= (string) $asset['code'] === 'USD' ? 'selected' : '' ?>><?= e((string) $asset['name']) ?> (<?= e((string) $asset['code']) ?>)</option><?php endforeach; ?></select></label>
+      <label>Amount<input name="amount" inputmode="decimal" placeholder="0.00" required <?= $disabled ?> /></label>
+    </div>
+    <label>Remark <span class="field-hint">Optional</span><input name="remark" maxlength="200" <?= $disabled ?> /></label>
+    <label class="pin-field">Transaction PIN<input type="password" name="pin" inputmode="numeric" pattern="[0-9]{4,6}" maxlength="6" autocomplete="off" required placeholder="••••" <?= $disabled ?> /></label>
+    <div class="form-actions"><button class="btn full" type="submit" <?= $disabled ?>>Send instantly</button></div>
+  </form>
+</section>
+
 <section class="card table-card static">
   <div class="panel-head"><div><h2>Wayfairs transfers</h2><p>Instant payments between customer accounts.</p></div><span class="pill"><?= count($internalTransfers) ?> loaded</span></div>
   <?php if ($internalTransfers === []): ?>

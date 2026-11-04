@@ -102,6 +102,48 @@ return function (Router $router, Database $database): void {
         Response::redirect($user['role'] === 'admin' ? '/admin' : '/dashboard');
     }, 'guest', true);
 
+    $router->get('/forgot', static fn () => $guest('auth/forgot'), 'guest');
+
+    $router->post('/forgot', static function (Request $request) use ($auth, $mailer, $emailTemplates): never {
+        $issued = $auth->issuePasswordReset((string) $request->post('email', ''), $request->ip());
+        if ($issued !== null && $mailer->isConfigured()) {
+            $scheme = (($_SERVER['HTTPS'] ?? '') === 'on') ? 'https' : 'http';
+            $rendered = $emailTemplates->render('password_reset', [
+                'first_name' => (string) $issued['user']['first_name'],
+                'minutes' => 30,
+                'reset_url' => $scheme . '://' . ($_SERVER['HTTP_HOST'] ?? 'localhost') . wayfairs_url('/reset?token=' . rawurlencode($issued['token'])),
+            ]);
+            if ($rendered !== null) {
+                $result = $mailer->send((string) $issued['user']['email'], $rendered['subject'], $rendered['body']);
+                if (!$result['ok']) {
+                    error_log('[wayfairs] password reset email failed: ' . ($result['error'] ?? 'unknown'));
+                }
+            }
+        }
+        // Same answer whether or not the account exists.
+        Flash::put('success', 'If an account exists for that email, a reset link is on its way. The link works once and expires in 30 minutes.');
+        Response::redirect('/forgot');
+    }, 'guest', true);
+
+    $router->get('/reset', static fn (Request $request) => $guest('auth/reset', ['token' => (string) $request->input('token', '')]), 'guest');
+
+    $router->post('/reset', static function (Request $request) use ($auth): never {
+        $token = trim((string) $request->post('token', ''));
+        $password = (string) $request->post('password', '');
+        if ($password !== (string) $request->post('password_confirm', '')) {
+            Flash::put('error', 'The two passwords do not match.');
+            Response::redirect('/reset?token=' . rawurlencode($token));
+        }
+        try {
+            $auth->resetPassword($token, $password);
+            Flash::put('success', 'Your password has been reset. Sign in with the new password.');
+            Response::redirect('/login');
+        } catch (RuntimeException $error) {
+            Flash::put('error', $error->getMessage());
+            Response::redirect($token === '' ? '/forgot' : '/reset?token=' . rawurlencode($token));
+        }
+    }, 'guest', true);
+
     $router->get('/register', static fn () => $guest('auth/register'), 'guest');
 
     $router->post('/register', static function (Request $request) use ($auth, $mailer, $emailTemplates): never {
@@ -344,7 +386,7 @@ return function (Router $router, Database $database): void {
         Response::redirect($back);
     };
 
-    $showReview = static function (string $kind) use ($page, $banking, $movementDestination): void {
+    $showReview = static function (string $kind) use ($page, $banking, $movementDestination, $auth): void {
         $user = Context::user() ?? [];
         $back = $kind === 'bill' ? '/bills' : '/transfer';
         $input = Draft::get('review.' . $kind);
@@ -359,17 +401,28 @@ return function (Router $router, Database $database): void {
             Flash::put('error', $error->getMessage());
             Response::redirect($back);
         }
-        $page('user/review', ['kind' => $kind, 'preview' => $preview, 'input' => $input, 'countries' => wayfairs_countries()]);
+        $page('user/review', ['kind' => $kind, 'preview' => $preview, 'input' => $input, 'countries' => wayfairs_countries(), 'hasPin' => $auth->hasTransactionPin((string) $user['id'])]);
     };
 
-    $confirmMovement = static function (string $kind) use ($banking, $database, $attempt, $movementDestination, $beneficiaries, $otp, $mailer, $emailTemplates): never {
+    $confirmMovement = static function (string $kind, Request $request) use ($banking, $database, $attempt, $movementDestination, $beneficiaries, $otp, $mailer, $emailTemplates, $auth): never {
         $user = Context::user() ?? [];
         $back = $kind === 'bill' ? '/bills' : '/transfer';
-        $input = Draft::take('review.' . $kind);
-        if ($input === null) {
+        $reviewBack = $kind === 'bill' ? '/bills/review' : '/transfer/review';
+        if (Draft::get('review.' . $kind) === null) {
             Flash::put('error', 'This review has expired. Enter the details again.');
             Response::redirect($back);
         }
+        try {
+            $pinOk = $auth->verifyTransactionPin((string) $user['id'], (string) $request->post('pin', ''));
+        } catch (RuntimeException $error) {
+            Flash::put('error', $error->getMessage());
+            Response::redirect($reviewBack);
+        }
+        if (!$pinOk) {
+            Flash::put('error', 'Transaction PIN is incorrect.');
+            Response::redirect($reviewBack);
+        }
+        $input = Draft::take('review.' . $kind);
         $otpEnabled = $otp->isEnabled();
         if ($otpEnabled) {
             $otpId = $otp->issue((string) $user['id'], $kind === 'bill' ? 'bill_payment' : 'bank_transfer', (string) ($_SERVER['REMOTE_ADDR'] ?? ''));
@@ -428,8 +481,8 @@ return function (Router $router, Database $database): void {
     $router->get('/bills/review', static fn () => $showReview('bill'), 'auth');
     $router->post('/transfer/review', static fn (Request $request) => $reviewMovement($request, 'transfer'), 'auth', true);
     $router->post('/bills/review', static fn (Request $request) => $reviewMovement($request, 'bill'), 'auth', true);
-    $router->post('/transfer/confirm', static fn () => $confirmMovement('transfer'), 'auth', true);
-    $router->post('/bills/confirm', static fn () => $confirmMovement('bill'), 'auth', true);
+    $router->post('/transfer/confirm', static fn (Request $request) => $confirmMovement('transfer', $request), 'auth', true);
+    $router->post('/bills/confirm', static fn (Request $request) => $confirmMovement('bill', $request), 'auth', true);
 
     $verifyOtp = static function (string $kind) use ($otp, $banking, $database, $movementDestination, $beneficiaries, $attempt, $mailer, $emailTemplates): never {
         $user = Context::user() ?? [];
@@ -597,7 +650,7 @@ return function (Router $router, Database $database): void {
         Response::redirect('/swap');
     }, 'auth', true);
 
-    $router->get('/swap/review', static function () use ($page, $swaps, $banking, $ledger, $accountRows, $me, $database, $kyc, $rates): void {
+    $router->get('/swap/review', static function () use ($page, $swaps, $banking, $ledger, $accountRows, $me, $database, $kyc, $rates, $auth): void {
         $user = $me();
         $input = Draft::get('review.swap');
         if ($input === null) {
@@ -610,25 +663,38 @@ return function (Router $router, Database $database): void {
             Flash::put('error', $error->getMessage());
             Response::redirect('/swap');
         }
-        $page('user/swap-review', ['preview' => $preview, 'input' => $input]);
+        $page('user/swap-review', ['preview' => $preview, 'input' => $input, 'hasPin' => $auth->hasTransactionPin((string) $me()['id'])]);
     }, 'auth');
 
-    $router->post('/swap/confirm', static function () use ($swaps, $attempt): never {
+    $router->post('/swap/confirm', static function (Request $request) use ($swaps, $attempt, $auth): never {
         $user = Context::user() ?? [];
-        $input = Draft::take('review.swap');
-        if ($input === null) {
+        if (Draft::get('review.swap') === null) {
             Flash::put('error', 'This review has expired. Enter the details again.');
             Response::redirect('/swap');
         }
+        try {
+            $pinOk = $auth->verifyTransactionPin((string) $user['id'], (string) $request->post('pin', ''));
+        } catch (RuntimeException $error) {
+            Flash::put('error', $error->getMessage());
+            Response::redirect('/swap/review');
+        }
+        if (!$pinOk) {
+            Flash::put('error', 'Transaction PIN is incorrect.');
+            Response::redirect('/swap/review');
+        }
+        $input = Draft::take('review.swap');
         $attempt(static function () use ($swaps, $user, $input): void {
             $swaps->execute((string) $user['id'], $input['from_code'], $input['to_code'], $input['amount'], (string) $input['idem']);
             Draft::forget('form.swap');
         }, 'Currency swap completed.', '/swap');
     }, 'auth', true);
 
-    $router->post('/transfer/internal', static function (Request $request) use ($banking, $database, $attempt, $mailer, $emailTemplates): never {
+    $router->post('/transfer/internal', static function (Request $request) use ($banking, $database, $attempt, $mailer, $emailTemplates, $auth): never {
         $user = Context::user() ?? [];
-        $attempt(static function () use ($banking, $database, $mailer, $emailTemplates, $user, $request): void {
+        $attempt(static function () use ($banking, $database, $mailer, $emailTemplates, $auth, $user, $request): void {
+            if (!$auth->verifyTransactionPin((string) $user['id'], (string) $request->post('pin', ''))) {
+                throw new RuntimeException('Transaction PIN is incorrect.');
+            }
             $result = $banking->internalTransfer((string) $user['id'], (string) $request->post('recipient_email', ''), (string) $request->post('asset_code', ''), (string) $request->post('amount', ''), (string) $request->post('remark', ''), (string) $request->post('idem', ''));
             if (Context::isImpersonating() || !$mailer->isConfigured()) {
                 return;
@@ -693,14 +759,27 @@ return function (Router $router, Database $database): void {
         $attempt(static fn () => $kyc->submit((string) $me()['id'], $request->allPost()), 'Verification details submitted for review.', '/kyc');
     }, 'auth', true);
 
-    $router->get('/security', static function () use ($page, $restrictions, $database, $me): void {
+    $router->get('/security', static function () use ($page, $restrictions, $database, $me, $auth): void {
         $user = $me();
         $page('user/security', [
+            'hasPin' => $auth->hasTransactionPin((string) $user['id']),
             'restrictions' => $restrictions->active((string) $user['id']),
             'profile' => $database->fetchOne('SELECT status, email, email_verified_at, last_login_at, created_at FROM users WHERE id = ?', [(string) $user['id']]) ?? [],
             'activeSessions' => (int) ($database->fetchOne('SELECT COUNT(*) AS total FROM sessions WHERE user_id = ? AND revoked_at IS NULL AND expires_at > ?', [(string) $user['id'], gmdate('Y-m-d H:i:s.u')])['total'] ?? 0),
         ]);
     }, 'auth');
+
+    $router->post('/security/pin', static function (Request $request) use ($auth, $audit, $attempt): never {
+        $user = Context::user() ?? [];
+        $attempt(static function () use ($auth, $audit, $request, $user): void {
+            $pin = trim((string) $request->post('pin', ''));
+            if ($pin !== trim((string) $request->post('pin_confirm', ''))) {
+                throw new RuntimeException('The two PIN entries do not match.');
+            }
+            $auth->setTransactionPin((string) $user['id'], (string) $request->post('current_password', ''), $pin);
+            $audit->record('account.pin_set', 'user', (string) $user['id'], null, []);
+        }, 'Transaction PIN saved.', '/security');
+    }, 'auth', true);
 
     // ---- administrator ----
     $router->get('/admin', static function () use ($admin, $database, $rates): void {
