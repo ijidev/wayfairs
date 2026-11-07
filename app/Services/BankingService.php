@@ -77,7 +77,7 @@ final class BankingService
         $this->database->transaction(function (Database $db) use ($userId, $account, $asset, $minor, $remark, $entryId, $depositId, $transactionId): void {
             $db->execute(
                 'INSERT INTO transactions (id, user_id, account_id, journal_entry_id, public_reference, transaction_type, direction, amount_minor, fee_minor, status, description, metadata) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-                [$transactionId, $userId, $account['id'], $entryId, Security::reference('DEP'), 'deposit', 'credit', $minor, 0, 'pending', 'Deposit awaiting verification', json_encode(['user_remark' => $remark ?: null], JSON_THROW_ON_ERROR)]
+                [$transactionId, $userId, $account['id'], $entryId, Security::reference('DEP'), 'deposit', 'credit', $minor, 0, 'pending', 'Deposit', json_encode(['user_remark' => $remark ?: null], JSON_THROW_ON_ERROR)]
             );
             $db->execute(
                 'INSERT INTO deposit_requests (id, user_id, account_id, transaction_id, deposit_type, amount_minor, user_remark, status, journal_entry_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
@@ -295,10 +295,11 @@ final class BankingService
         $encrypted = Security::encrypt($destination, (string) Config::instance()->get('app_key', ''));
         $summary = $this->destinationSummary($destination);
         $remark = $this->cleanText($remark, 500);
-        $this->database->transaction(function (Database $db) use ($userId, $account, $amountMinor, $fee, $total, $withdrawalId, $holdId, $transactionId, $entryId, $encrypted, $summary, $asset, $kind, $label, $remark, $purpose): void {
+        $this->database->transaction(function (Database $db) use ($userId, $account, $amountMinor, $fee, $total, $withdrawalId, $holdId, $transactionId, $entryId, $encrypted, $summary, $asset, $kind, $label, $remark, $purpose, $destination): void {
+            $counterparty = $this->cleanText((string) ($destination['beneficiary_name'] ?? ''), 160);
             $db->execute(
-                'INSERT INTO transactions (id, user_id, account_id, journal_entry_id, public_reference, transaction_type, direction, amount_minor, fee_minor, status, description, metadata) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-                [$transactionId, $userId, $account['id'], $entryId, Security::reference($kind === 'bank_transfer' ? 'BTF' : 'WDR'), 'withdrawal', 'debit', $amountMinor, $fee, 'pending', $label . ' pending', json_encode(['request_kind' => $kind, 'user_remark' => $remark ?: null], JSON_THROW_ON_ERROR | JSON_INVALID_UTF8_SUBSTITUTE)]
+                'INSERT INTO transactions (id, user_id, account_id, journal_entry_id, public_reference, transaction_type, direction, amount_minor, fee_minor, status, counterparty_label, description, metadata) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+                [$transactionId, $userId, $account['id'], $entryId, Security::reference($kind === 'bank_transfer' ? 'BTF' : 'WDR'), 'withdrawal', 'debit', $amountMinor, $fee, 'pending', $counterparty !== '' ? $counterparty : null, $label, json_encode(['request_kind' => $kind, 'user_remark' => $remark ?: null], JSON_THROW_ON_ERROR | JSON_INVALID_UTF8_SUBSTITUTE)]
             );
             $db->execute('INSERT INTO holds (id, account_id, source_type, source_id, amount_minor) VALUES (?, ?, ?, ?, ?)', [$holdId, $account['id'], 'withdrawal', $withdrawalId, $total]);
             $db->execute(
@@ -355,6 +356,8 @@ final class BankingService
         if ((string) $recipient['id'] === $senderId) {
             throw new \RuntimeException('You cannot send money to your own account.');
         }
+        $senderUser = $this->database->fetchOne('SELECT first_name, last_name FROM users WHERE id = ?', [$senderId]) ?? [];
+        $senderName = trim((string) ($senderUser['first_name'] ?? '') . ' ' . (string) ($senderUser['last_name'] ?? ''));
         $recipientAccount = $this->accountFor((string) $recipient['id'], $assetCode);
         $amountMinor = $this->positiveAmount($amount, (int) $asset['scale']);
         $fee = (int) $asset['transfer_fee_minor'];
@@ -370,7 +373,7 @@ final class BankingService
         $senderTransactionId = Security::uuid();
         $recipientTransactionId = Security::uuid();
         $note = trim((string) $note) ?: null;
-        $this->database->transaction(function (Database $db) use ($senderId, $senderAccount, $recipient, $recipientAccount, $asset, $amountMinor, $fee, $entryId, $transferId, $senderTransactionId, $recipientTransactionId, $note): void {
+        $this->database->transaction(function (Database $db) use ($senderId, $senderAccount, $recipient, $recipientAccount, $asset, $amountMinor, $fee, $entryId, $transferId, $senderTransactionId, $recipientTransactionId, $note, $senderName): void {
             $postings = [
                 ['ledger_account_id' => (string) $senderAccount['ledger_account_id'], 'side' => 'debit', 'amount_minor' => $amountMinor],
                 ['ledger_account_id' => (string) $recipientAccount['ledger_account_id'], 'side' => 'credit', 'amount_minor' => $amountMinor],
@@ -386,11 +389,11 @@ final class BankingService
             );
             $db->execute(
                 'INSERT INTO transactions (id, user_id, account_id, journal_entry_id, public_reference, transaction_type, direction, amount_minor, fee_minor, status, counterparty_label, description, metadata, completed_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-                [$senderTransactionId, $senderId, $senderAccount['id'], $entryId, Security::reference('TRF'), 'transfer_out', 'debit', $amountMinor, $fee, 'completed', (string) $recipient['email_normalized'], $note ?? 'Transfer sent', json_encode(['transfer_id' => $transferId], JSON_THROW_ON_ERROR), $this->now()]
+                [$senderTransactionId, $senderId, $senderAccount['id'], $entryId, Security::reference('TRF'), 'transfer_out', 'debit', $amountMinor, $fee, 'completed', trim((string) ($recipient['first_name'] ?? '') . ' ' . (string) ($recipient['last_name'] ?? '')), $note ?: 'Transfer sent', json_encode(['transfer_id' => $transferId], JSON_THROW_ON_ERROR), $this->now()]
             );
             $db->execute(
                 'INSERT INTO transactions (id, user_id, account_id, journal_entry_id, public_reference, transaction_type, direction, amount_minor, fee_minor, status, counterparty_label, description, metadata, completed_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-                [$recipientTransactionId, (string) $recipient['id'], $recipientAccount['id'], $entryId, Security::reference('TRF'), 'transfer_in', 'credit', $amountMinor, 0, 'completed', $senderId, $note ?? 'Transfer received', json_encode(['transfer_id' => $transferId], JSON_THROW_ON_ERROR), $this->now()]
+                [$recipientTransactionId, (string) $recipient['id'], $recipientAccount['id'], $entryId, Security::reference('TRF'), 'transfer_in', 'credit', $amountMinor, 0, 'completed', $senderName !== '' ? $senderName : $senderId, $note ?: 'Transfer received', json_encode(['transfer_id' => $transferId], JSON_THROW_ON_ERROR), $this->now()]
             );
         });
         return $this->database->fetchOne('SELECT * FROM transfers WHERE id = ?', [$transferId]);
@@ -552,7 +555,7 @@ final class BankingService
     public function receipt(string $transactionId, string $userId): array
     {
         $row = $this->database->fetchOne(
-            'SELECT t.*, a.account_number, aset.id AS asset_id, aset.code AS asset_code, aset.symbol AS asset_symbol, aset.scale AS asset_scale, aset.asset_type, aset.usd_provider_reference FROM transactions t JOIN accounts a ON a.id = t.account_id JOIN assets aset ON aset.id = a.asset_id WHERE t.id = ? AND t.user_id = ?',
+            'SELECT t.*, u.first_name, u.last_name, a.account_number, aset.id AS asset_id, aset.code AS asset_code, aset.symbol AS asset_symbol, aset.scale AS asset_scale, aset.asset_type, aset.usd_provider_reference FROM transactions t JOIN users u ON u.id = t.user_id JOIN accounts a ON a.id = t.account_id JOIN assets aset ON aset.id = a.asset_id WHERE t.id = ? AND t.user_id = ?',
             [$transactionId, $userId]
         );
         if (!$row) {

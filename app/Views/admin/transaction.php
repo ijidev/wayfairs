@@ -15,6 +15,11 @@ $total = (int) $r['amount_minor'] + ($credit ? 0 : $fee);
 $rate = $usdRates[$code] ?? null;
 $metadata = json_decode((string) ($r['metadata'] ?? '{}'), true);
 $remark = is_array($metadata) ? trim((string) ($metadata['user_remark'] ?? '')) : '';
+$holderName = trim((string) ($r['first_name'] ?? '') . ' ' . (string) ($r['last_name'] ?? ''));
+$counterpartyName = trim((string) ($r['counterparty_label'] ?? ''));
+$credit = (string) $r['direction'] === 'credit';
+$senderName = $credit ? ($counterpartyName !== '' ? $counterpartyName : 'External source') : ($holderName !== '' ? $holderName : 'Account holder');
+$recipientName = $credit ? ($holderName !== '' ? $holderName : 'Account holder') : ($counterpartyName !== '' ? $counterpartyName : 'External beneficiary');
 $typeLabel = is_array($metadata) && ($metadata['kind'] ?? null) === 'swap'
     ? 'Currency swap'
     : (is_array($metadata) && ($metadata['request_kind'] ?? null) === 'bank_transfer'
@@ -72,7 +77,8 @@ $processingDone = $final;
     <?php if (!$credit && $fee > 0): ?><div><dt>Total held</dt><dd><?= e(wayfairs_amount($total, $scale, $symbol, $code)) ?></dd></div><?php endif; ?>
     <div><dt>USD equivalent</dt><dd><?= e(wayfairs_usd_equivalent((int) $r['amount_minor'], $scale, $rate)) ?></dd></div>
     <div><dt>Currency account</dt><dd class="mono"><?= e((string) $r['account_number']) ?> · <?= e($code) ?></dd></div>
-    <?php if (!empty($r['counterparty_label'])): ?><div><dt>Counterparty</dt><dd><?= e((string) $r['counterparty_label']) ?></dd></div><?php endif; ?>
+    <div><dt>Sender</dt><dd><?= e($senderName) ?></dd></div>
+    <div><dt>Recipient</dt><dd><?= e($recipientName) ?></dd></div>
     <?php if ($remark !== ''): ?><div><dt>Your note</dt><dd><?= e($remark) ?></dd></div><?php endif; ?>
     <div><dt>Created</dt><dd><?= e(wayfairs_datetime((string) $r['created_at'])) ?></dd></div>
     <div><dt>Completed</dt><dd data-completed-at><?= e(wayfairs_datetime($r['completed_at'] ?? null)) ?></dd></div>

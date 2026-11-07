@@ -776,6 +776,12 @@ If you did not request this, you can ignore this message. Your password will not
 Regards,
 Wayfairs');
 
+-- ==== migration 012_neutral_descriptions (source: 012_neutral_descriptions.sql) ====
+UPDATE transactions SET description = 'Deposit' WHERE description = 'Deposit awaiting verification';
+UPDATE transactions SET description = 'Withdrawal' WHERE description IN ('Withdrawal awaiting completion', 'Withdrawal pending');
+UPDATE transactions SET description = 'Bank transfer' WHERE description = 'Bank transfer pending';
+UPDATE transactions SET description = 'Bill payment' WHERE description = 'Bill payment pending';
+
 -- ==== migration ledger (matches the application checksums) ====
 INSERT INTO schema_migrations (version, checksum, applied_at) VALUES
     ('001_core', 'b005c9d14426caf95b8834c76c94d86a01ae14210a33766935160f30e67df25e', UTC_TIMESTAMP(6)),
@@ -787,4 +793,5 @@ INSERT INTO schema_migrations (version, checksum, applied_at) VALUES
     ('007_otp_and_email', '4973a91448907c47f7382cf3c04bae30099ce9a13fc042f0078b6d86b9c18665', UTC_TIMESTAMP(6)),
     ('008_professional_emails', '1a16aa3b5e419310d13341af41d5225973e588d72b04358c21b8830160a2c592', UTC_TIMESTAMP(6)),
     ('010_swaps', 'c682a1af76a11b8aa1fc5723a5bbb9cc61a4bf60b984e7a3e78b358503818a4c', UTC_TIMESTAMP(6)),
-    ('011_password_reset_and_pin', '8869b73fd8566d5136a27e50cce1d7f69e9ccac5662d85a7ecc2f57b1363175b', UTC_TIMESTAMP(6));
+    ('011_password_reset_and_pin', '8869b73fd8566d5136a27e50cce1d7f69e9ccac5662d85a7ecc2f57b1363175b', UTC_TIMESTAMP(6)),
+    ('012_neutral_descriptions', '3a45f1238d29af47105ed1d508712b93f0b7a99d2fdf312098e1b08b25c542e1', UTC_TIMESTAMP(6));

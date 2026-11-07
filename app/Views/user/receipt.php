@@ -15,6 +15,11 @@ $typeLabel = is_array($metadata) && ($metadata['kind'] ?? null) === 'swap'
         ? 'Bank Transfer'
         : ucwords(str_replace('_', ' ', (string) $r['transaction_type'])));
 $rate = $usdRates[$r['asset_code']] ?? null;
+$holderName = trim((string) ($r['first_name'] ?? '') . ' ' . (string) ($r['last_name'] ?? ''));
+$counterpartyName = trim((string) ($r['counterparty_label'] ?? ''));
+$credit = (string) $r['direction'] === 'credit';
+$senderName = $credit ? ($counterpartyName !== '' ? $counterpartyName : 'External source') : ($holderName !== '' ? $holderName : 'Account holder');
+$recipientName = $credit ? ($holderName !== '' ? $holderName : 'Account holder') : ($counterpartyName !== '' ? $counterpartyName : 'External beneficiary');
 ?>
 <div class="receipt-page">
   <header class="page-header">
@@ -43,7 +48,8 @@ $rate = $usdRates[$r['asset_code']] ?? null;
         <div class="receipt-detail"><span>USD equivalent</span><strong><?= e(wayfairs_usd_equivalent((int) $r['amount_minor'], (int) $r['asset_scale'], $rate)) ?></strong></div>
         <div class="receipt-detail"><span>Account</span><strong class="mono"><?= e((string) $r['account_number']) ?></strong></div>
         <?php if ($fee !== null): ?><div class="receipt-detail"><span>Fee</span><strong><?= e($fee) ?></strong></div><?php endif; ?>
-        <?php if (!empty($r['counterparty_label'])): ?><div class="receipt-detail"><span>Counterparty</span><strong><?= e((string) $r['counterparty_label']) ?></strong></div><?php endif; ?>
+        <div class="receipt-detail"><span>Sender</span><strong><?= e($senderName) ?></strong></div>
+        <div class="receipt-detail"><span>Recipient</span><strong><?= e($recipientName) ?></strong></div>
         <div class="receipt-detail"><span>Created</span><strong><?= e(wayfairs_datetime((string) $r['created_at'])) ?></strong></div>
         <div class="receipt-detail"><span>Completed</span><strong><?= e(wayfairs_datetime($r['completed_at'] ?? null)) ?></strong></div>
       </div>

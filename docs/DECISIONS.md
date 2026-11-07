@@ -295,3 +295,20 @@ Forgot password: a reset link carries a random single-use token. Only its SHA-25
 Transaction PIN: 4 to 6 digits, stored as a password hash, set only after the account password is confirmed. Five wrong PINs lock PIN checks for 15 minutes. The PIN is required to confirm bank transfers, bill payments, swaps, and Wayfairs transfers. A wrong PIN keeps the review open so the customer can retry.
 
 Known limits: neither /forgot nor PIN entry has a rate limit beyond the PIN lockout. A 4-digit PIN has only 10,000 combinations, so 6 digits are recommended. Reset emails need SMTP to be configured and tested. The reset response takes slightly longer when an email is actually sent, which is a minor way to infer that an account exists; a queue would remove it.
+
+## WDR-023 — Receipt shows sender and recipient; neutral descriptions
+
+Date: 2026-11-07
+
+- Receipt and transaction overview now show explicit Sender and Recipient names.
+  The account holder's name comes from the users table (joined in receipt() and
+  receiptForAdmin()). The other party's name is stored in counterparty_label:
+  internal transfers store the other customer's name, bank transfers/bill
+  payments store the beneficiary name, admin adjustments keep "Wayfairs
+  administration". Deposits leave it null and the views fall back to
+  "External source"/"External beneficiary".
+- Descriptions no longer embed a status word ("Bank transfer pending",
+  "Deposit awaiting verification", etc.). Status lives only in the status column
+  and the live status pill, so a description can never go stale. Migration 012
+  normalises historical rows. Internal transfers keep the customer's note when
+  present, otherwise "Transfer sent"/"Transfer received".
