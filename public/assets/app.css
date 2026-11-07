@@ -661,3 +661,6 @@ body.app-shell{
 .bank-card-balance{margin-top:.5rem}
 .bank-card-bottom{margin-top:auto;padding-top:.5rem;align-items:flex-end}
 @media (max-width:640px){.bank-balance-card{min-height:230px;padding:1.2rem 1.25rem;gap:.9rem}.bank-card-balance{margin-top:.25rem}}
+
+.otp-resend{display:flex;align-items:center;justify-content:space-between;gap:.75rem;margin-top:1rem;padding-top:1rem;border-top:1px solid var(--line)}
+.otp-resend .field-hint{margin:0}

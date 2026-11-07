@@ -312,3 +312,16 @@ Date: 2026-11-07
   and the live status pill, so a description can never go stale. Migration 012
   normalises historical rows. Internal transfers keep the customer's note when
   present, otherwise "Transfer sent"/"Transfer received".
+
+## WDR-024 — Resend the OTP instead of restarting the payment
+
+Date: 2026-11-07
+
+The one-time code expires after 10 minutes, but the payment draft (and the
+review) stays in the session for 30 minutes. The OTP page now offers a
+"Resend code" action (`POST /transfer/otp/resend` and `/bills/otp/resend`).
+Resending reissues a code for the stored draft, keeps the original input, and
+returns the customer to the same verification page. A wrong or expired code
+keeps the page open with the resend button, so the customer never has to re-enter
+the transfer. If the 30-minute draft itself has expired there is nothing left to
+verify, so the customer is sent back to the transfer form.

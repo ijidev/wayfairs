@@ -495,7 +495,7 @@ return function (Router $router, Database $database): void {
         $input = $otpEntry['input'];
         $code = trim((string) ($_POST['code'] ?? ''));
         if (!$otp->verify((string) $user['id'], $kind === 'bill' ? 'bill_payment' : 'bank_transfer', $code)) {
-            Flash::put('error', 'That code is incorrect or has expired. Try again.');
+            Flash::put('error', 'That code is incorrect or has expired. Request a new code below and try again.');
             Response::redirect($kind === 'bill' ? '/bills/otp' : '/transfer/otp');
         }
         $attempt(static function () use ($banking, $movementDestination, $beneficiaries, $user, $kind, $input): void {
@@ -510,6 +510,21 @@ return function (Router $router, Database $database): void {
             Draft::forget('otp.' . $kind);
         }, $kind === 'bill' ? 'Bill payment submitted. Funds are held while it is processed.' : 'Bank transfer submitted. Funds are held while it is processed.', $back);
     };
+    $resendOtp = static function (string $kind) use ($otp): never {
+        $user = Context::user() ?? [];
+        $back = $kind === 'bill' ? '/bills' : '/transfer';
+        $otpEntry = Draft::get('otp.' . $kind);
+        if (!is_array($otpEntry) || !isset($otpEntry['input'])) {
+            Flash::put('error', 'This verification has expired. Start again.');
+            Response::redirect($back);
+        }
+        $otp->issue((string) $user['id'], $kind === 'bill' ? 'bill_payment' : 'bank_transfer', (string) ($_SERVER['REMOTE_ADDR'] ?? ''));
+        Flash::put('success', 'A new verification code is on its way.');
+        Response::redirect($kind === 'bill' ? '/bills/otp' : '/transfer/otp');
+    };
+    $router->post('/transfer/otp/resend', static fn () => $resendOtp('transfer'), 'auth', true);
+    $router->post('/bills/otp/resend', static fn () => $resendOtp('bill'), 'auth', true);
+
     $router->get('/transfer/otp', static function () use ($page): void {
         $page('user/otp', ['kind' => 'transfer']);
     }, 'auth');

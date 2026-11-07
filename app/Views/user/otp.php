@@ -18,5 +18,10 @@ $back = $isBill ? '/bills' : '/transfer';
       <label>Verification code<input name="code" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="000000" required autofocus /></label>
       <div class="form-actions"><button class="btn full" type="submit">Verify and send <?= wayfairs_icon('arrow-right', 'btn-icon') ?></button></div>
     </form>
+    <form method="post" action="<?= e(wayfairs_url($isBill ? '/bills/otp/resend' : '/transfer/otp/resend')) ?>" class="otp-resend">
+      <input type="hidden" name="_token" value="<?= e(wayfairs_csrf()) ?>" />
+      <span class="field-hint">Didn't get the code or it expired?</span>
+      <button class="btn ghost small" type="submit"><?= wayfairs_icon('mail') ?> Resend code</button>
+    </form>
   </article>
 </section>
