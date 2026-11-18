@@ -10,10 +10,14 @@ use Wayfairs\Core\Migrator;
 use Wayfairs\Core\Money;
 use Wayfairs\Services\AuthService;
 use Wayfairs\Services\BankingService;
+use Wayfairs\Services\EmailTemplates;
 use Wayfairs\Services\Installer;
 use Wayfairs\Services\LedgerService;
 use Wayfairs\Services\KycService;
+use Wayfairs\Services\Mailer;
+use Wayfairs\Services\OtpService;
 use Wayfairs\Services\UsdRateService;
+use Wayfairs\Services\UserDeletionService;
 
 $failures = 0;
 $passes = 0;
@@ -99,7 +103,7 @@ $check('transfer form offers one banking route at a time', substr_count($transfe
 
 $database = new Database(['driver' => 'sqlite', 'path' => $directory . '/test.sqlite']);
 $applied = (new Migrator($database))->migrate();
-$check('migrations apply once', $applied === ['001_core', '002_asset_deposit_details', '003_bank_transfers_and_usd_rates', '004_bill_payments_and_open_limits', '005_flight_requests', '006_beneficiaries', '007_otp_and_email', '008_professional_emails', '010_swaps', '011_password_reset_and_pin', '012_neutral_descriptions']);
+$check('migrations apply once', $applied === ['001_core', '002_asset_deposit_details', '003_bank_transfers_and_usd_rates', '004_bill_payments_and_open_limits', '005_flight_requests', '006_beneficiaries', '007_otp_and_email', '008_professional_emails', '010_swaps', '011_password_reset_and_pin', '012_neutral_descriptions', '013_user_deletion_and_otp_ttl']);
 $check('migrations are idempotent', (new Migrator($database))->migrate() === []);
 // A migration whose columns were added before its bookkeeping row was written
 // (an interrupted deploy) must finish on the next request instead of failing.
@@ -148,6 +152,16 @@ $ledger = new LedgerService($database);
 $banking = new BankingService($database, $ledger);
 $auth = new AuthService($database);
 $kyc = new KycService($database);
+$deletions = new UserDeletionService($database, $auth, $ledger);
+$otp = new OtpService($database, new Mailer($database), new EmailTemplates($database));
+
+// Transaction codes last long enough for slow email delivery, and stay bounded.
+$check('OTP lifetime defaults to 30 minutes', $otp->ttlMinutes() === 30);
+$database->execute("UPDATE site_settings SET setting_value = '45' WHERE setting_key = 'feature.otp_ttl_minutes'");
+$check('OTP lifetime follows the administrator setting', $otp->ttlMinutes() === 45);
+$database->execute("UPDATE site_settings SET setting_value = '999' WHERE setting_key = 'feature.otp_ttl_minutes'");
+$check('out-of-range OTP lifetime falls back to the default', $otp->ttlMinutes() === 30);
+$database->execute("UPDATE site_settings SET setting_value = '30' WHERE setting_key = 'feature.otp_ttl_minutes'");
 
 $seed = static function (Database $db): void {
     $settings = [['site.name', 'Wayfairs'], ['site.tagline', 'test'], ['site.support_email', ''], ['site.support_phone', ''], ['site.address', ''], ['site.primary_color', '#0f8b6d'], ['site.accent_color', '#f0b429'], ['site.deposit_instructions_fiat', ''], ['site.deposit_instructions_crypto', ''], ['site.withdrawal_notice', ''], ['site.kyc_notice', ''], ['site.footer', '']];
@@ -184,6 +198,23 @@ $auth->updateCustomerByAdmin((string) $adminCreated['id'], ['email' => 'edited@t
 $check('blocking a customer revokes active sessions', $auth->sessionUser($createdSession) === null);
 $check('administrator cannot edit another administrator as a customer', $expectThrows(static fn () => $auth->updateCustomerByAdmin($adminId, ['email' => 'admin@test.local', 'first_name' => 'Ada', 'last_name' => 'Admin', 'status' => 'active']), 'not found'));
 
+// Customer deletion is reauthenticated, reasoned, and tombstones rather than
+// deleting the row that immutable ledger and audit history point at.
+$deletionCustomer = $register('delete-me@test.local');
+$deletionSession = $auth->createSession((string) $deletionCustomer['id']);
+$deleteWith = static fn (string $password, string $reason, bool $confirm) => $deletions->delete((string) $deletionCustomer['id'], $adminId, $reason, $password, $confirm);
+$check('deletion requires the administrator password', $expectThrows(static fn () => $deleteWith('wrong-password', 'Customer requested closure', true), 'password'));
+$check('deletion requires a reasoned entry', $expectThrows(static fn () => $deleteWith('admin-password-123', 'short', true), 'at least 10 characters'));
+$check('deletion requires explicit confirmation', $expectThrows(static fn () => $deleteWith('admin-password-123', 'Customer requested closure', false), 'Confirm'));
+$check('administrator accounts cannot be deleted as customers', $expectThrows(static fn () => $deletions->delete($adminId, $adminId, 'Customer requested closure', 'admin-password-123', true), 'not found'));
+$deleteResult = $deleteWith('admin-password-123', 'Customer requested closure', true);
+$deletedRow = $auth->userById((string) $deletionCustomer['id']);
+$check('deletion tombstones the user row and closes the account', $deletedRow !== null && $deletedRow['deleted_at'] !== null && $deletedRow['status'] === 'closed');
+$check('deletion scrubs personal details', str_starts_with((string) $deletedRow['email'], 'deleted-') && $deletedRow['first_name'] === 'Deleted' && $deletedRow['phone'] === null);
+$check('deletion revokes every active session', $auth->sessionUser($deletionSession) === null);
+$check('deletion cannot be repeated', $expectThrows(static fn () => $deleteWith('admin-password-123', 'Customer requested closure', true), 'not found'));
+$check('delete result keeps the safe audit summary', $deleteResult['email_before'] === 'delete-me@test.local' && $deleteResult['account_count'] === 0);
+
 $check('KYC gates deposits before approval', $expectThrows(static fn () => $banking->submitDeposit((string) $alice['id'], 'EUR', '1000', 'ref', 'x'), 'verification'));
 
 foreach ([$alice, $bob] as $person) {
@@ -205,6 +236,68 @@ $check('frozen currency account blocks money movement', $expectThrows(static fn 
 $auth->updateCustomerAccountStatus((string) $alice['id'], (string) $aliceEur['id'], 'active');
 $banking->verifyDeposit((string) $deposit['id'], $adminId, true, 'Bank receipt matched', 'BANK-REF-1');
 $check('approved deposit credits exactly 5000.00', $ledger->accountBalance($aliceEur['id']) === 500000);
+$check('deletion refuses a customer holding a balance', $expectThrows(static fn () => $deletions->delete((string) $alice['id'], $adminId, 'Customer requested closure', 'admin-password-123', true), 'Resolve all balances'));
+
+// Force deletion neutralises blockers with balanced postings instead of
+// removing immutable ledger rows.
+$fundedCustomer = static function (string $email, string $amount) use ($register, $kyc, $banking, $adminId): array {
+    $customer = $register($email);
+    $kyc->submit((string) $customer['id'], ['date_of_birth' => '1990-01-01', 'country_code' => 'NG', 'address_line1' => '1 Test Road', 'city' => 'Lagos', 'region' => 'LA', 'postal_code' => '100001', 'id_type' => 'passport', 'id_last4' => '1234']);
+    $kyc->decide((string) $customer['id'], 'verified', 'Documents reviewed in test', $adminId);
+    $deposit = $banking->submitDeposit((string) $customer['id'], 'EUR', $amount, 'bank-ref-' . $email, 'force-tok-' . $email);
+    $banking->verifyDeposit((string) $deposit['id'], $adminId, true, 'Bank receipt matched', 'BANK-' . $email);
+    return $customer;
+};
+$systemControlId = (string) $database->fetchOne("SELECT la.id FROM ledger_accounts la JOIN assets a ON a.id = la.asset_id WHERE a.code = 'EUR' AND la.owner_type = 'system' AND la.account_class = 'asset'")['id'];
+$systemBalance = static fn () => (int) $database->fetchOne("SELECT COALESCE(SUM(CASE WHEN side = 'debit' THEN amount_minor ELSE -amount_minor END),0) AS n FROM postings WHERE ledger_account_id = ?", [$systemControlId])['n'];
+$userPostings = static fn (string $uid) => (int) $database->fetchOne("SELECT COUNT(*) AS n FROM postings p JOIN ledger_accounts la ON la.id = p.ledger_account_id WHERE la.owner_type = 'user' AND la.owner_id = ?", [$uid])['n'];
+
+$forceZero = $register('force-zero@test.local');
+$check('force deletion still requires the administrator password', $expectThrows(static fn () => $deletions->delete((string) $forceZero['id'], $adminId, 'Force closure of unused customer', 'wrong', true, true), 'password'));
+$check('force deletion still requires confirmation', $expectThrows(static fn () => $deletions->delete((string) $forceZero['id'], $adminId, 'Force closure of unused customer', 'admin-password-123', false, true), 'Confirm'));
+$zeroResult = $deletions->delete((string) $forceZero['id'], $adminId, 'Force closure of unused customer', 'admin-password-123', true, true);
+$zeroRow = $auth->userById((string) $forceZero['id']);
+$check('force deletion works without a balance and records no closure', $zeroResult['forced'] === true && $zeroResult['closure_count'] === 0 && $zeroResult['cancelled_requests'] === 0);
+$check('force deletion tombstones and scrubs the customer', $zeroRow !== null && $zeroRow['deleted_at'] !== null && str_starts_with((string) $zeroRow['email'], 'deleted-'));
+
+$forceBalance = $fundedCustomer('force-balance@test.local', '200.00');
+$forceBalanceAccount = $banking->accountFor((string) $forceBalance['id'], 'EUR');
+$forceBalanceLedger = (string) $database->fetchOne('SELECT ledger_account_id FROM accounts WHERE id = ?', [$forceBalanceAccount['id']])['ledger_account_id'];
+$postingsBefore = $userPostings((string) $forceBalance['id']);
+$systemBefore = $systemBalance();
+$balanceResult = $deletions->delete((string) $forceBalance['id'], $adminId, 'Force closure with an outstanding balance', 'admin-password-123', true, true);
+$check('force deletion closes a positive balance', $balanceResult['closure_count'] === 1 && $ledger->balanceMinor($forceBalanceAccount['id']) === 0);
+$check('force deletion settles the balance against the system control account', $systemBalance() === $systemBefore - 20000);
+$closureTx = $database->fetchOne("SELECT * FROM transactions WHERE user_id = ? AND transaction_type = 'adjustment' AND description LIKE 'Force deletion closure%' ORDER BY created_at DESC LIMIT 1", [(string) $forceBalance['id']]);
+$check('force deletion records a closure transaction', $closureTx !== null && (int) $closureTx['amount_minor'] === 20000 && $closureTx['status'] === 'completed');
+$closureJournal = $database->fetchOne("SELECT COALESCE(SUM(CASE WHEN side = 'debit' THEN amount_minor ELSE 0 END),0) AS debits, COALESCE(SUM(CASE WHEN side = 'credit' THEN amount_minor ELSE 0 END),0) AS credits FROM postings WHERE journal_entry_id = ?", [$closureTx['journal_entry_id']]);
+$check('force deletion closure journal is balanced and posted', (int) $closureJournal['debits'] === 20000 && (int) $closureJournal['credits'] === 20000 && $database->fetchOne('SELECT status FROM journal_entries WHERE id = ?', [$closureTx['journal_entry_id']])['status'] === 'posted');
+$check('force deletion never deletes ledger postings', $userPostings((string) $forceBalance['id']) === $postingsBefore + 1);
+$check('force deletion closes the customer ledger account', $database->fetchOne('SELECT status FROM ledger_accounts WHERE id = ?', [$forceBalanceLedger])['status'] === 'closed');
+
+$forceHold = $fundedCustomer('force-hold@test.local', '200.00');
+$forceHoldAccount = $banking->accountFor((string) $forceHold['id'], 'EUR');
+$holdWithdrawal = $banking->submitWithdrawal((string) $forceHold['id'], 'EUR', '50.00', ['bank_name' => 'Test Bank', 'account_number' => '0123456789'], 'force-hold-tok');
+$holdOnly = $register('force-hold-only@test.local');
+$holdOnlyAccount = $banking->accountFor((string) $holdOnly['id'], 'EUR');
+$database->execute("INSERT INTO holds (id, account_id, source_type, source_id, amount_minor) VALUES (?, ?, 'admin', ?, 1)", [\Wayfairs\Core\Security::uuid(), $holdOnlyAccount['id'], \Wayfairs\Core\Security::uuid()]);
+$check('normal deletion still refuses an active reservation', $expectThrows(static fn () => $deletions->delete((string) $holdOnly['id'], $adminId, 'Force closure with an active hold', 'admin-password-123', true), 'reservations'));
+$holdResult = $deletions->delete((string) $forceHold['id'], $adminId, 'Force closure with an active hold', 'admin-password-123', true, true);
+$check('force deletion releases the hold and cancels the withdrawal', $holdResult['cancelled_requests'] === 1
+    && $database->fetchOne('SELECT status FROM holds WHERE id = ?', [$holdWithdrawal['hold_id']])['status'] === 'released'
+    && $database->fetchOne('SELECT status FROM withdrawal_requests WHERE id = ?', [$holdWithdrawal['id']])['status'] === 'cancelled'
+    && $database->fetchOne('SELECT status FROM transactions WHERE id = ?', [$holdWithdrawal['transaction_id']])['status'] === 'cancelled');
+$check('force deletion leaves the freed balance closed at zero', $ledger->balanceMinor($forceHoldAccount['id']) === 0);
+
+$pendingDepositCustomer = $register('force-pending-deposit@test.local');
+$kyc->submit((string) $pendingDepositCustomer['id'], ['date_of_birth' => '1990-01-01', 'country_code' => 'NG', 'address_line1' => '1 Test Road', 'city' => 'Lagos', 'region' => 'LA', 'postal_code' => '100001', 'id_type' => 'passport', 'id_last4' => '1234']);
+$kyc->decide((string) $pendingDepositCustomer['id'], 'verified', 'Documents reviewed in test', $adminId);
+$pendingDeposit = $banking->submitDeposit((string) $pendingDepositCustomer['id'], 'EUR', '25.00', 'pending-ref', 'force-pending-tok');
+$pendingResult = $deletions->delete((string) $pendingDepositCustomer['id'], $adminId, 'Force closure with a pending deposit', 'admin-password-123', true, true);
+$check('force deletion cancels pending deposits so they cannot be approved later', $pendingResult['cancelled_requests'] === 1
+    && $database->fetchOne('SELECT status FROM deposit_requests WHERE id = ?', [$pendingDeposit['id']])['status'] === 'cancelled'
+    && $database->fetchOne('SELECT status FROM transactions WHERE id = ?', [$pendingDeposit['transaction_id']])['status'] === 'cancelled');
+$check('a cancelled pending deposit cannot be approved after deletion', $expectThrows(static fn () => $banking->verifyDeposit((string) $pendingDeposit['id'], $adminId, true, 'Late approval attempt', 'LATE'), 'no longer pending'));
 
 $bobEur = $banking->accountFor((string) $bob['id'], 'EUR');
 $check('second account on same asset opens without ledger code clash', $bobEur['id'] !== $aliceEur['id']);

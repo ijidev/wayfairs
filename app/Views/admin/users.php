@@ -35,7 +35,7 @@ $restrictedCount = count(array_filter($users, static fn (array $u): bool => (int
           <span class="record-cell"><span><?= wayfairs_pill((string) $u['status']) ?></span><small>Account</small></span>
           <span class="record-cell"><span><?= wayfairs_pill('kyc ' . $kycState) ?></span><small>Verification</small></span>
           <span class="record-cell"><span><?= (int) $u['account_count'] ?> account<?= (int) $u['account_count'] === 1 ? '' : 's' ?></span><small><?= (int) $u['restriction_count'] ?> restriction<?= (int) $u['restriction_count'] === 1 ? '' : 's' ?></small></span>
-          <span class="record-actions"><a class="btn small ghost" href="<?= e(wayfairs_url('/admin/users/' . $u['id'])) ?>">Open <?= wayfairs_icon('arrow-right', 'btn-icon') ?></a></span>
+          <span class="record-actions"><a class="btn small ghost" href="<?= e(wayfairs_url('/admin/users/' . $u['id'] . '/edit')) ?>">Edit customer</a><a class="btn small ghost" href="<?= e(wayfairs_url('/admin/users/' . $u['id'])) ?>">Open <?= wayfairs_icon('arrow-right', 'btn-icon') ?></a></span>
         </div>
       <?php endforeach; ?>
     </div>

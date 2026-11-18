@@ -782,6 +782,17 @@ UPDATE transactions SET description = 'Withdrawal' WHERE description IN ('Withdr
 UPDATE transactions SET description = 'Bank transfer' WHERE description = 'Bank transfer pending';
 UPDATE transactions SET description = 'Bill payment' WHERE description = 'Bill payment pending';
 
+-- ==== migration 013_user_deletion_and_otp_ttl (source: 013_user_deletion_and_otp_ttl.sql) ====
+-- Customer deletion tombstones the user row so immutable ledger and audit rows
+-- keep a valid foreign-key owner. Personal details are scrubbed separately.
+ALTER TABLE users ADD COLUMN deleted_at DATETIME(6) NULL AFTER updated_at;
+CREATE INDEX users_deleted_at_idx ON users(deleted_at);
+
+-- Configurable transaction OTP lifetime; the service falls back to 30 minutes.
+INSERT INTO site_settings (setting_key, setting_value, is_public, updated_by)
+SELECT 'feature.otp_ttl_minutes', '30', 0, NULL FROM DUAL
+WHERE NOT EXISTS (SELECT 1 FROM site_settings WHERE setting_key = 'feature.otp_ttl_minutes');
+
 -- ==== migration ledger (matches the application checksums) ====
 INSERT INTO schema_migrations (version, checksum, applied_at) VALUES
     ('001_core', 'b005c9d14426caf95b8834c76c94d86a01ae14210a33766935160f30e67df25e', UTC_TIMESTAMP(6)),
@@ -794,4 +805,5 @@ INSERT INTO schema_migrations (version, checksum, applied_at) VALUES
     ('008_professional_emails', '1a16aa3b5e419310d13341af41d5225973e588d72b04358c21b8830160a2c592', UTC_TIMESTAMP(6)),
     ('010_swaps', 'c682a1af76a11b8aa1fc5723a5bbb9cc61a4bf60b984e7a3e78b358503818a4c', UTC_TIMESTAMP(6)),
     ('011_password_reset_and_pin', '8869b73fd8566d5136a27e50cce1d7f69e9ccac5662d85a7ecc2f57b1363175b', UTC_TIMESTAMP(6)),
-    ('012_neutral_descriptions', '3a45f1238d29af47105ed1d508712b93f0b7a99d2fdf312098e1b08b25c542e1', UTC_TIMESTAMP(6));
+    ('012_neutral_descriptions', '3a45f1238d29af47105ed1d508712b93f0b7a99d2fdf312098e1b08b25c542e1', UTC_TIMESTAMP(6)),
+    ('013_user_deletion_and_otp_ttl', 'd8ca2d3b11e54fa5b963a9e0649125e98337835e36d5c5aa82374202a4861bcf', UTC_TIMESTAMP(6));

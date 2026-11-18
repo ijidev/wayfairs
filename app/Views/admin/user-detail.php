@@ -79,6 +79,19 @@ if (!array_key_exists($activePanel, $panels)) {
     </ul>
   <?php endif; ?>
 </section>
+
+<section class="card static">
+  <div class="panel-head"><div><h2>Delete customer</h2><p>Permanently revokes access and scrubs personal details. Immutable ledger and audit history are retained.</p></div></div>
+  <div class="notice bad"><?= wayfairs_icon('info') ?><div><strong>This cannot be undone</strong><p>Confirm with your administrator password and a recorded reason. Normal deletion refuses any remaining balance or active reservation.</p></div></div>
+  <form class="stack" method="post" action="<?= e(wayfairs_url('/admin/users/' . $profile['id'] . '/delete')) ?>">
+    <input type="hidden" name="_token" value="<?= e(wayfairs_csrf()) ?>" />
+    <label>Deletion reason<input name="reason" minlength="10" maxlength="300" placeholder="Why this customer is being removed" required /></label>
+    <label>Your administrator password<input type="password" name="password" autocomplete="current-password" required /></label>
+    <label class="inline-check"><input type="checkbox" name="force" value="1" /> Force delete<br /><span class="field-hint">Releases active reservations, cancels pending requests, and posts any remaining balance to the system control account. No ledger or posting record is deleted, and every journal stays balanced.</span></label>
+    <label class="inline-check"><input type="checkbox" name="confirm" value="1" required /> I understand this deletes the customer and cannot be undone</label>
+    <div class="form-actions"><button class="btn danger" type="submit">Delete customer</button></div>
+  </form>
+</section>
 <?php endif; ?>
 
 <?php if ($activePanel === 'verification'): ?>

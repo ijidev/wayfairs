@@ -63,7 +63,7 @@ final class AuthService
     public function updateCustomerByAdmin(string $userId, array $input): array
     {
         $customer = $this->userById($userId);
-        if (!$customer || (string) $customer['role'] !== 'user') {
+        if (!$customer || (string) $customer['role'] !== 'user' || $customer['deleted_at'] !== null) {
             throw new \RuntimeException('Customer account was not found.');
         }
         $email = $this->normalizeEmail((string) ($input['email'] ?? ''));

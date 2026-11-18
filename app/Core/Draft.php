@@ -10,7 +10,9 @@ namespace Wayfairs\Core;
  */
 final class Draft
 {
-    private const MAX_AGE_SECONDS = 1800;
+    // Must outlive the maximum configured OTP window (60 minutes) so a customer
+    // never loses the saved transfer while a valid code is still usable.
+    private const MAX_AGE_SECONDS = 5400;
 
     public static function put(string $name, array $data): void
     {

@@ -27,6 +27,7 @@ use Wayfairs\Services\Restrictions;
 use Wayfairs\Services\SiteSettings;
 use Wayfairs\Services\SwapService;
 use Wayfairs\Services\UsdRateService;
+use Wayfairs\Services\UserDeletionService;
 
 return function (Router $router, Database $database): void {
     $auth = new AuthService($database);
@@ -43,6 +44,7 @@ return function (Router $router, Database $database): void {
     $emailTemplates = new EmailTemplates($database);
     $otp = new OtpService($database, $mailer, $emailTemplates);
     $rates = new UsdRateService($database);
+    $deletions = new UserDeletionService($database, $auth, $ledger);
 
     $page = static fn (string $view, array $data = []) => View::render($view, $data, 'layouts/app');
     $admin = static fn (string $view, array $data = []) => View::render($view, $data, 'layouts/admin');
@@ -426,6 +428,12 @@ return function (Router $router, Database $database): void {
         $otpEnabled = $otp->isEnabled();
         if ($otpEnabled) {
             $otpId = $otp->issue((string) $user['id'], $kind === 'bill' ? 'bill_payment' : 'bank_transfer', (string) ($_SERVER['REMOTE_ADDR'] ?? ''));
+            if ($otpId === null) {
+                // Keep the reviewed input so the customer can retry without re-entering it.
+                Draft::put('review.' . $kind, $input);
+                Flash::put('error', 'We could not send the verification code. Your details are saved — please try again.');
+                Response::redirect($reviewBack);
+            }
             Draft::put('otp.' . $kind, ['id' => $otpId, 'input' => $input]);
             Response::redirect($kind === 'bill' ? '/bills/otp' : '/transfer/otp');
         }
@@ -518,18 +526,22 @@ return function (Router $router, Database $database): void {
             Flash::put('error', 'This verification has expired. Start again.');
             Response::redirect($back);
         }
-        $otp->issue((string) $user['id'], $kind === 'bill' ? 'bill_payment' : 'bank_transfer', (string) ($_SERVER['REMOTE_ADDR'] ?? ''));
+        $newId = $otp->issue((string) $user['id'], $kind === 'bill' ? 'bill_payment' : 'bank_transfer', (string) ($_SERVER['REMOTE_ADDR'] ?? ''));
+        if ($newId === null) {
+            Flash::put('error', 'We could not send a new code. Any earlier valid code still works — please try again.');
+            Response::redirect($kind === 'bill' ? '/bills/otp' : '/transfer/otp');
+        }
         Flash::put('success', 'A new verification code is on its way.');
         Response::redirect($kind === 'bill' ? '/bills/otp' : '/transfer/otp');
     };
     $router->post('/transfer/otp/resend', static fn () => $resendOtp('transfer'), 'auth', true);
     $router->post('/bills/otp/resend', static fn () => $resendOtp('bill'), 'auth', true);
 
-    $router->get('/transfer/otp', static function () use ($page): void {
-        $page('user/otp', ['kind' => 'transfer']);
+    $router->get('/transfer/otp', static function () use ($page, $otp): void {
+        $page('user/otp', ['kind' => 'transfer', 'otpMinutes' => $otp->ttlMinutes()]);
     }, 'auth');
-    $router->get('/bills/otp', static function () use ($page): void {
-        $page('user/otp', ['kind' => 'bill']);
+    $router->get('/bills/otp', static function () use ($page, $otp): void {
+        $page('user/otp', ['kind' => 'bill', 'otpMinutes' => $otp->ttlMinutes()]);
     }, 'auth');
     $router->post('/transfer/otp', static fn () => $verifyOtp('transfer'), 'auth', true);
     $router->post('/bills/otp', static fn () => $verifyOtp('bill'), 'auth', true);
@@ -851,7 +863,7 @@ return function (Router $router, Database $database): void {
                 (SELECT COUNT(*) FROM accounts a WHERE a.user_id = u.id) AS account_count,
                 (SELECT COUNT(*) FROM capability_restrictions cr WHERE cr.user_id = u.id AND cr.released_at IS NULL) AS restriction_count,
                 (SELECT MAX(t.created_at) FROM transactions t WHERE t.user_id = u.id) AS last_transaction_at
-                FROM users u LEFT JOIN kyc_profiles kp ON kp.user_id = u.id WHERE u.role = 'user' ORDER BY u.created_at DESC LIMIT 300"),
+                FROM users u LEFT JOIN kyc_profiles kp ON kp.user_id = u.id WHERE u.role = 'user' AND u.deleted_at IS NULL ORDER BY u.created_at DESC LIMIT 300"),
         ]);
     }, 'admin');
 
@@ -873,7 +885,7 @@ return function (Router $router, Database $database): void {
 
     $router->get('/admin/users/{id}', static function (Request $request) use ($admin, $database, $ledger, $kyc, $restrictions, $rates): void {
         $userId = (string) $request->route('id');
-        $profile = $database->fetchOne('SELECT u.id, u.email, u.first_name, u.last_name, u.phone, u.status, u.role, u.created_at, u.last_login_at FROM users u WHERE u.id = ?', [$userId]);
+        $profile = $database->fetchOne('SELECT u.id, u.email, u.first_name, u.last_name, u.phone, u.status, u.role, u.created_at, u.last_login_at FROM users u WHERE u.id = ? AND u.deleted_at IS NULL', [$userId]);
         if ($profile === null) {
             Response::notFound();
         }
@@ -895,7 +907,7 @@ return function (Router $router, Database $database): void {
     }, 'admin');
 
     $router->get('/admin/users/{id}/edit', static function (Request $request) use ($admin, $database): void {
-        $profile = $database->fetchOne("SELECT id, email, first_name, last_name, phone, status FROM users WHERE id = ? AND role = 'user'", [(string) $request->route('id')]);
+        $profile = $database->fetchOne("SELECT id, email, first_name, last_name, phone, status FROM users WHERE id = ? AND role = 'user' AND deleted_at IS NULL", [(string) $request->route('id')]);
         if ($profile === null) {
             Response::notFound();
         }
@@ -910,6 +922,29 @@ return function (Router $router, Database $database): void {
             $remark = trim((string) $request->post('admin_remark', ''));
             $audit->record('customer.updated', 'user', $userId, $remark ?: null, ['status_before' => $before['status'] ?? null, 'status_after' => $updated['status']]);
         }, 'Customer profile updated.', '/admin/users/' . $userId);
+    }, 'admin', true);
+
+    $router->post('/admin/users/{id}/delete', static function (Request $request) use ($deletions, $audit, $attempt): never {
+        $userId = (string) $request->route('id');
+        $attempt(static function () use ($deletions, $audit, $request, $userId): void {
+            $reason = trim((string) $request->post('reason', ''));
+            $force = (string) $request->post('force', '') === '1';
+            $result = $deletions->delete(
+                $userId,
+                (string) Context::user()['id'],
+                $reason,
+                (string) $request->post('password', ''),
+                (string) $request->post('confirm', '') === '1',
+                $force
+            );
+            $audit->record($force ? 'customer.force_deleted' : 'customer.deleted', 'user', $userId, $reason, [
+                'email_before' => $result['email_before'],
+                'account_count' => $result['account_count'],
+                'forced' => $result['forced'],
+                'closure_count' => $result['closure_count'],
+                'cancelled_requests' => $result['cancelled_requests'],
+            ]);
+        }, 'Customer account deleted. Access is revoked and personal details were scrubbed.', '/admin/users');
     }, 'admin', true);
 
     $router->post('/admin/users/{id}/accounts/{accountId}/status', static function (Request $request) use ($auth, $audit, $attempt, $database, $mailer, $emailTemplates): never {
@@ -1128,16 +1163,29 @@ return function (Router $router, Database $database): void {
         $attempt(static fn () => $flights->decide($id, (string) $request->post('status', ''), (string) $request->post('admin_note', ''), (string) Context::user()['id']), 'Flight request updated.', '/admin/flights');
     }, 'admin', true);
 
-    $router->get('/admin/otp', static function () use ($admin, $database, $otp): void {
-        $admin('admin/otp', ['enabled' => $otp->isEnabled()]);
+    $router->get('/admin/otp', static function () use ($admin, $otp, $settings): void {
+        $admin('admin/otp', [
+            'enabled' => $otp->isEnabled(),
+            'ttlMinutes' => $otp->ttlMinutes(),
+        ]);
     }, 'admin');
 
-    $router->post('/admin/otp', static function (Request $request) use ($database, $otp, $audit, $attempt): never {
-        $attempt(static function () use ($database, $otp, $audit, $request): void {
-            $settings = new SiteSettings($database);
+    $router->post('/admin/otp', static function (Request $request) use ($otp, $audit, $attempt, $settings): never {
+        $attempt(static function () use ($otp, $audit, $request, $settings): void {
+            $adminId = (string) Context::user()['id'];
             $enable = (string) $request->post('enabled', '0') === '1';
-            $settings->update('feature.otp', $enable ? '1' : '0', (string) Context::user()['id'], false);
+            $settings->update('feature.otp', $enable ? '1' : '0', $adminId, false);
             $audit->record($enable ? 'feature.otp.enabled' : 'feature.otp.disabled', 'site_setting', 'feature.otp', null, []);
+
+            $minutes = (int) $request->post('ttl_minutes', 30);
+            if ($minutes < 5 || $minutes > 60) {
+                throw new \RuntimeException('Choose a code lifetime between 5 and 60 minutes.');
+            }
+            $before = $otp->ttlMinutes();
+            if ($minutes !== $before) {
+                $settings->update('feature.otp_ttl_minutes', (string) $minutes, $adminId, false);
+                $audit->record('feature.otp_ttl.updated', 'site_setting', 'feature.otp_ttl_minutes', null, ['minutes_before' => $before, 'minutes_after' => $minutes]);
+            }
         }, 'Verification code setting saved.', '/admin/otp');
     }, 'admin', true);
 

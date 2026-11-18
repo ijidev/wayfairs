@@ -12,7 +12,7 @@ $back = $isBill ? '/bills' : '/transfer';
 
 <section class="content-grid">
   <article class="card form-card">
-    <div class="form-intro"><span class="page-kicker">Verification</span><h2>One-time code</h2><p>The code expires in 10 minutes. You have 5 attempts.</p></div>
+    <div class="form-intro"><span class="page-kicker">Verification</span><h2>One-time code</h2><p>The code expires in <?= (int) ($otpMinutes ?? 30) ?> minutes. You have 5 attempts.</p><p class="field-hint">Didn't arrive? Use Resend code below — your payment details stay saved.</p></div>
     <form class="stack" method="post" action="<?= e(wayfairs_url($isBill ? '/bills/otp' : '/transfer/otp')) ?>">
       <input type="hidden" name="_token" value="<?= e(wayfairs_csrf()) ?>" />
       <label>Verification code<input name="code" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="000000" required autofocus /></label>
