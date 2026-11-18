@@ -574,6 +574,10 @@ body.app-shell{
 .review-actions{display:flex;justify-content:flex-end;gap:.75rem;flex-wrap:wrap;margin-top:1rem}
 .inline-check{display:flex;align-items:center;gap:.5rem;font-weight:650}
 .inline-check input{width:auto}
+.force-option{margin:0}
+.force-option-title{display:flex;align-items:center;gap:.5rem;font-weight:650}
+.force-option-title input{width:auto}
+.danger-zone{scroll-margin-top:1rem;border-color:#fecaca}
 @media (max-width:640px){.review-list>div{grid-template-columns:1fr}}
 
 /* Transactions: mobile-first list and overview */

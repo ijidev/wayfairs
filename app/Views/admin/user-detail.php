@@ -20,7 +20,7 @@ if (!array_key_exists($activePanel, $panels)) {
 ?>
 <header class="page-header">
   <div class="page-heading"><span class="page-icon"><?= wayfairs_icon('user') ?></span><div class="page-heading-copy"><span class="page-kicker">Customer account</span><h1><?= e($customerName) ?></h1><p><?= e((string) $profile['email']) ?> · registered <?= e(wayfairs_datetime((string) $profile['created_at'])) ?></p></div></div>
-  <div class="page-actions"><a class="btn ghost" href="<?= e(wayfairs_url('/admin/users')) ?>">Customer directory</a><a class="btn" href="<?= e(wayfairs_url('/admin/users/' . $profile['id'] . '/edit')) ?>"><?= wayfairs_icon('settings') ?> Edit customer</a></div>
+  <div class="page-actions"><a class="btn ghost" href="<?= e(wayfairs_url('/admin/users')) ?>">Customer directory</a><a class="btn" href="<?= e(wayfairs_url('/admin/users/' . $profile['id'] . '/edit')) ?>"><?= wayfairs_icon('settings') ?> Edit customer</a><a class="btn danger" href="<?= e(wayfairs_url('/admin/users/' . $profile['id'] . '?panel=overview#delete-customer')) ?>">Delete customer</a></div>
 </header>
 
 <nav class="subnav" aria-label="Customer sections">
@@ -80,14 +80,14 @@ if (!array_key_exists($activePanel, $panels)) {
   <?php endif; ?>
 </section>
 
-<section class="card static">
+<section class="card static danger-zone" id="delete-customer">
   <div class="panel-head"><div><h2>Delete customer</h2><p>Permanently revokes access and scrubs personal details. Immutable ledger and audit history are retained.</p></div></div>
   <div class="notice bad"><?= wayfairs_icon('info') ?><div><strong>This cannot be undone</strong><p>Confirm with your administrator password and a recorded reason. Normal deletion refuses any remaining balance or active reservation.</p></div></div>
   <form class="stack" method="post" action="<?= e(wayfairs_url('/admin/users/' . $profile['id'] . '/delete')) ?>">
     <input type="hidden" name="_token" value="<?= e(wayfairs_csrf()) ?>" />
     <label>Deletion reason<input name="reason" minlength="10" maxlength="300" placeholder="Why this customer is being removed" required /></label>
     <label>Your administrator password<input type="password" name="password" autocomplete="current-password" required /></label>
-    <label class="inline-check"><input type="checkbox" name="force" value="1" /> Force delete<br /><span class="field-hint">Releases active reservations, cancels pending requests, and posts any remaining balance to the system control account. No ledger or posting record is deleted, and every journal stays balanced.</span></label>
+    <label class="force-option"><span class="force-option-title"><input type="checkbox" name="force" value="1" /> Force delete</span><span class="field-hint">Releases active reservations, cancels pending requests, and posts any remaining balance to the system control account. No ledger or posting record is deleted, and every journal stays balanced.</span></label>
     <label class="inline-check"><input type="checkbox" name="confirm" value="1" required /> I understand this deletes the customer and cannot be undone</label>
     <div class="form-actions"><button class="btn danger" type="submit">Delete customer</button></div>
   </form>
