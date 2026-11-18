@@ -331,6 +331,7 @@ body.app-shell{
 .app-shell input:disabled,.app-shell select:disabled,.app-shell textarea:disabled{background:#edf2f0;color:var(--muted);cursor:not-allowed;opacity:.82}.app-shell button:disabled{cursor:not-allowed;opacity:.55;transform:none!important;box-shadow:none!important}.uppercase-input{text-transform:uppercase}
 .field-label{display:flex;justify-content:space-between;gap:.5rem}.field-label small{color:var(--muted);font-weight:550}
 .field-hint{font-size:.72rem;line-height:1.45}.form-divider{height:1px;background:var(--line-2);margin:.15rem 0}
+.receipt-upload{padding:.5rem .6rem}.receipt-upload::file-selector-button{border:0;border-radius:8px;background:var(--brand-soft);color:var(--brand);font:inherit;font-weight:700;padding:.45rem .75rem;margin-right:.75rem;cursor:pointer}
 .form-actions{display:flex;align-items:center;justify-content:flex-end;gap:.65rem;flex-wrap:wrap;padding-top:.2rem}.form-actions.start{justify-content:flex-start}
 .destination-group{margin:0;border:1px solid var(--line)!important;border-radius:14px!important;padding:1rem!important;background:var(--card-2)}
 .destination-group legend{padding:0 .45rem!important;color:var(--muted);font-size:.67rem!important;text-transform:uppercase;letter-spacing:.12em;font-weight:800!important}

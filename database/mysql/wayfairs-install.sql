@@ -793,6 +793,16 @@ INSERT INTO site_settings (setting_key, setting_value, is_public, updated_by)
 SELECT 'feature.otp_ttl_minutes', '30', 0, NULL FROM DUAL
 WHERE NOT EXISTS (SELECT 1 FROM site_settings WHERE setting_key = 'feature.otp_ttl_minutes');
 
+-- ==== migration 014_deposit_receipts (source: 014_deposit_receipts.sql) ====
+-- Proof-of-payment slips are stored outside the public document root. The
+-- deposit row keeps only the random storage name and a safe display label.
+ALTER TABLE deposit_requests
+  ADD COLUMN receipt_file VARCHAR(255) NULL AFTER journal_entry_id,
+  ADD COLUMN receipt_name VARCHAR(255) NULL AFTER receipt_file,
+  ADD COLUMN receipt_mime VARCHAR(100) NULL AFTER receipt_name,
+  ADD COLUMN receipt_size BIGINT UNSIGNED NULL AFTER receipt_mime,
+  ADD COLUMN receipt_uploaded_at DATETIME(6) NULL AFTER receipt_size;
+
 -- ==== migration ledger (matches the application checksums) ====
 INSERT INTO schema_migrations (version, checksum, applied_at) VALUES
     ('001_core', 'b005c9d14426caf95b8834c76c94d86a01ae14210a33766935160f30e67df25e', UTC_TIMESTAMP(6)),
@@ -806,4 +816,5 @@ INSERT INTO schema_migrations (version, checksum, applied_at) VALUES
     ('010_swaps', 'c682a1af76a11b8aa1fc5723a5bbb9cc61a4bf60b984e7a3e78b358503818a4c', UTC_TIMESTAMP(6)),
     ('011_password_reset_and_pin', '8869b73fd8566d5136a27e50cce1d7f69e9ccac5662d85a7ecc2f57b1363175b', UTC_TIMESTAMP(6)),
     ('012_neutral_descriptions', '3a45f1238d29af47105ed1d508712b93f0b7a99d2fdf312098e1b08b25c542e1', UTC_TIMESTAMP(6)),
-    ('013_user_deletion_and_otp_ttl', 'd8ca2d3b11e54fa5b963a9e0649125e98337835e36d5c5aa82374202a4861bcf', UTC_TIMESTAMP(6));
+    ('013_user_deletion_and_otp_ttl', 'd8ca2d3b11e54fa5b963a9e0649125e98337835e36d5c5aa82374202a4861bcf', UTC_TIMESTAMP(6)),
+    ('014_deposit_receipts', '6c13c4c3944858e5abe893088942c5d8275d2fcc1dd5aafe8adb7acfe747dfb2', UTC_TIMESTAMP(6));

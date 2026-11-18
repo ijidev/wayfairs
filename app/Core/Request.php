@@ -63,6 +63,11 @@ final class Request
         return is_array($_POST) ? $_POST : [];
     }
 
+    public function file(string $key): mixed
+    {
+        return $_FILES[$key] ?? null;
+    }
+
     public function header(string $name): ?string
     {
         $key = 'HTTP_' . strtoupper(str_replace('-', '_', $name));

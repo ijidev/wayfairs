@@ -8,6 +8,7 @@
 !/storage/logs/.gitkeep
 /storage/uploads/*
 !/storage/uploads/.gitkeep
+!/storage/uploads/.htaccess
 /storage/cache/*
 !/storage/cache/.gitkeep
 /.env

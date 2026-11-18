@@ -325,3 +325,21 @@ returns the customer to the same verification page. A wrong or expired code
 keeps the page open with the resend button, so the customer never has to re-enter
 the transfer. If the 30-minute draft itself has expired there is nothing left to
 verify, so the customer is sent back to the transfer form.
+
+## WDR-025 — Deposit requests require a receipt slip
+
+Date: 2026-11-18
+
+- The customer deposit form is multipart and refuses to submit without a receipt
+  or transfer-confirmation file. Accepted formats are JPG, PNG, WebP, and PDF up
+  to 5 MB; the file's real MIME type must match its extension.
+- Uploads are staged first and only attached after the deposit row is created,
+  so a failed or KYC-blocked submission leaves no deposit and no orphaned file.
+  A repeated idempotency token keeps the first receipt instead of duplicating it.
+- Receipts are written under `storage/uploads/deposit-receipts/`, outside `public/`.
+  Filenames are UUIDs, never customer-supplied names; the deposit row stores only
+  a safe display name and content metadata. Storage directories deny direct web
+  requests and the file is readable only through an administrator-gated route
+  that records a `deposit.receipt_viewed` audit entry.
+- Existing deposits without a receipt are displayed as "Not attached"; the
+  historical ledger is never rewritten.

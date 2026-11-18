@@ -1,0 +1,9 @@
+# Customer upload storage. Never serve these files directly; the admin receipt
+# route is the only way to read them.
+<IfModule mod_authz_core.c>
+  Require all denied
+</IfModule>
+<IfModule !mod_authz_core.c>
+  Order allow,deny
+  Deny from all
+</IfModule>

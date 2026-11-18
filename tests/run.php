@@ -10,6 +10,7 @@ use Wayfairs\Core\Migrator;
 use Wayfairs\Core\Money;
 use Wayfairs\Services\AuthService;
 use Wayfairs\Services\BankingService;
+use Wayfairs\Services\DepositReceiptService;
 use Wayfairs\Services\EmailTemplates;
 use Wayfairs\Services\Installer;
 use Wayfairs\Services\LedgerService;
@@ -90,6 +91,15 @@ $allDenied = $denyFiles !== [] && array_filter($denyFiles, static fn (string $ru
 $check('every internal directory ships a deny rule', $allDenied && count($denyFiles) === 7);
 $check('public .htaccess canonicalises /public URLs', str_contains($publicHtaccess, 'THE_REQUEST') && str_contains($publicHtaccess, 'public'));
 
+// Deposit receipts must be uploaded through the app, never fetched from disk.
+$routesSource = (string) file_get_contents($projectRoot . '/app/routes.php');
+$depositViewSource = (string) file_get_contents($projectRoot . '/app/Views/user/deposit.php');
+$adminDepositsSource = (string) file_get_contents($projectRoot . '/app/Views/admin/deposits.php');
+$check('deposit form is multipart with a required receipt file', str_contains($depositViewSource, 'enctype="multipart/form-data"') && str_contains($depositViewSource, 'type="file"') && str_contains($depositViewSource, 'name="receipt"') && str_contains($depositViewSource, 'required'));
+$check('admin deposit queue links to the stored receipt', str_contains($adminDepositsSource, "/admin/deposits/' . \$deposit['id'] . '/receipt"));
+$check('receipt download is an administrator-only route', preg_match("#\\\$router->get\\('/admin/deposits/\\{id\\}/receipt'.*?\\}, 'admin'\\);#s", $routesSource) === 1);
+$check('upload storage denies direct web requests', str_contains((string) @file_get_contents($projectRoot . '/storage/uploads/.htaccess'), 'Require all denied'));
+
 // Public marketing copy must sell the product, not expose its internals.
 $homeView = (string) file_get_contents($projectRoot . '/app/Views/home.php');
 $check('homepage leads with the multi-currency positioning', str_contains($homeView, 'Your money. Multiple currencies. One place.'));
@@ -103,7 +113,7 @@ $check('transfer form offers one banking route at a time', substr_count($transfe
 
 $database = new Database(['driver' => 'sqlite', 'path' => $directory . '/test.sqlite']);
 $applied = (new Migrator($database))->migrate();
-$check('migrations apply once', $applied === ['001_core', '002_asset_deposit_details', '003_bank_transfers_and_usd_rates', '004_bill_payments_and_open_limits', '005_flight_requests', '006_beneficiaries', '007_otp_and_email', '008_professional_emails', '010_swaps', '011_password_reset_and_pin', '012_neutral_descriptions', '013_user_deletion_and_otp_ttl']);
+$check('migrations apply once', $applied === ['001_core', '002_asset_deposit_details', '003_bank_transfers_and_usd_rates', '004_bill_payments_and_open_limits', '005_flight_requests', '006_beneficiaries', '007_otp_and_email', '008_professional_emails', '010_swaps', '011_password_reset_and_pin', '012_neutral_descriptions', '013_user_deletion_and_otp_ttl', '014_deposit_receipts']);
 $check('migrations are idempotent', (new Migrator($database))->migrate() === []);
 // A migration whose columns were added before its bookkeeping row was written
 // (an interrupted deploy) must finish on the next request instead of failing.
@@ -228,6 +238,34 @@ $check('deposit is pending until verified', $deposit['status'] === 'pending');
 $check('deposit optional remark is stored', $deposit['user_remark'] === 'bank-ref-1');
 $repeat = $banking->submitDeposit((string) $alice['id'], 'EUR', '5000.00', 'bank-ref-1', 'tok-1');
 $check('repeated deposit with same token is idempotent', $repeat['id'] === $deposit['id']);
+
+// Proof of payment: a receipt must accompany a deposit and stay outside the web root.
+$receipts = new DepositReceiptService($database, $directory);
+$pngPath = $directory . '/bank-receipt.png';
+$textPath = $directory . '/bank-receipt.txt';
+file_put_contents($pngPath, base64_decode('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8DwHwAFAAH/q842iQAAAABJRU5ErkJggg==', true));
+file_put_contents($textPath, 'not a receipt');
+$check('deposit receipt requires an uploaded file', $expectThrows(static fn () => $receipts->captureUpload(null), 'Upload a receipt slip'));
+$check('deposit receipt rejects a wrong file type', $expectThrows(static fn () => $receipts->capturePath($textPath, 'bank-receipt.png'), 'JPG, PNG'));
+$check('deposit receipt rejects a mismatched extension', $expectThrows(static fn () => $receipts->capturePath($pngPath, 'bank-receipt.pdf'), 'JPG, PNG'));
+$check('deposit receipt rejects path traversal', $expectThrows(static fn () => $receipts->resolveStoredName('../../config.php'), 'Invalid receipt reference'));
+$largePath = $directory . '/large-receipt.png';
+file_put_contents($largePath, str_repeat('x', DepositReceiptService::MAX_BYTES + 1));
+$check('deposit receipt rejects files over 5 MB', $expectThrows(static fn () => $receipts->capturePath($largePath, 'large-receipt.png'), 'under 5 MB'));
+unlink($largePath);
+$receipt = $receipts->capturePath($pngPath, '/tmp/bank receipt.png');
+$stagedPath = $directory . '/storage/uploads/deposit-receipts/.staging/' . $receipt['staged_name'];
+$check('deposit receipt is staged outside the public root', is_file($stagedPath) && $receipt['name'] === 'bank receipt.png' && $receipt['mime'] === 'image/png');
+$receipts->attach((string) $deposit['id'], $receipt);
+$storedReceipt = $database->fetchOne('SELECT receipt_file, receipt_name, receipt_mime, receipt_size FROM deposit_requests WHERE id = ?', [$deposit['id']]);
+$check('deposit receipt metadata is persisted', $storedReceipt['receipt_file'] === $receipt['staged_name'] && $storedReceipt['receipt_name'] === 'bank receipt.png' && $storedReceipt['receipt_mime'] === 'image/png' && (int) $storedReceipt['receipt_size'] > 0);
+$adminReceipt = $receipts->forAdmin((string) $deposit['id']);
+$check('administrator can read an attached receipt', is_file($adminReceipt['path']) && $adminReceipt['mime'] === 'image/png' && $adminReceipt['deposit']['id'] === $deposit['id']);
+$duplicateReceipt = $receipts->capturePath($pngPath, 'bank-receipt.png');
+$receipts->attach((string) $deposit['id'], $duplicateReceipt);
+$finalReceipts = glob($directory . '/storage/uploads/deposit-receipts/*') ?: [];
+$check('replayed deposit keeps only the first receipt', $database->fetchOne('SELECT receipt_file FROM deposit_requests WHERE id = ?', [$deposit['id']])['receipt_file'] === $receipt['staged_name'] && !is_file($directory . '/storage/uploads/deposit-receipts/.staging/' . $duplicateReceipt['staged_name']) && count($finalReceipts) === 1);
+
 $aliceEur = $banking->accountFor((string) $alice['id'], 'EUR');
 $check('pending deposit does not change the balance', $ledger->accountBalance($aliceEur['id']) === 0);
 $accountStatusChange = $auth->updateCustomerAccountStatus((string) $alice['id'], (string) $aliceEur['id'], 'frozen');

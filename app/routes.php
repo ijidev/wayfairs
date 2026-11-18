@@ -16,6 +16,7 @@ use Wayfairs\Services\Audit;
 use Wayfairs\Services\AuthService;
 use Wayfairs\Services\BankingService;
 use Wayfairs\Services\BeneficiaryService;
+use Wayfairs\Services\DepositReceiptService;
 use Wayfairs\Services\Features;
 use Wayfairs\Services\EmailTemplates;
 use Wayfairs\Services\Mailer;
@@ -34,6 +35,7 @@ return function (Router $router, Database $database): void {
     $settings = new SiteSettings($database);
     $ledger = new LedgerService($database);
     $banking = new BankingService($database, $ledger);
+    $receipts = new DepositReceiptService($database);
     $kyc = new KycService($database);
     $restrictions = new Restrictions($database);
     $audit = new Audit($database);
@@ -265,10 +267,19 @@ return function (Router $router, Database $database): void {
         ]);
     }, 'auth');
 
-    $router->post('/deposit', static function (Request $request) use ($banking, $database, $attempt, $mailer, $emailTemplates): never {
+    $router->post('/deposit', static function (Request $request) use ($banking, $receipts, $database, $attempt, $mailer, $emailTemplates): never {
         $user = Context::user() ?? [];
-        $attempt(static function () use ($banking, $mailer, $emailTemplates, $user, $request): void {
-            $result = $banking->submitDeposit((string) $user['id'], (string) $request->post('asset_code', ''), (string) $request->post('amount', ''), (string) $request->post('remark', ''), (string) $request->post('idem', ''));
+        $attempt(static function () use ($banking, $receipts, $mailer, $emailTemplates, $user, $request): void {
+            // Stage the receipt first so a request without proof of payment is
+            // never created; discard it if anything downstream fails.
+            $receipt = $receipts->captureUpload($request->file('receipt'));
+            try {
+                $result = $banking->submitDeposit((string) $user['id'], (string) $request->post('asset_code', ''), (string) $request->post('amount', ''), (string) $request->post('remark', ''), (string) $request->post('idem', ''));
+                $receipts->attach((string) $result['id'], $receipt);
+            } catch (\Throwable $error) {
+                $receipts->discard($receipt);
+                throw $error;
+            }
             if (!Context::isImpersonating() && $mailer->isConfigured()) {
                 $asset = $banking->assetByCode((string) $request->post('asset_code', ''));
                 $transaction = $database->fetchOne('SELECT public_reference FROM transactions WHERE id = ?', [(string) ($result['transaction_id'] ?? '')]);
@@ -1072,6 +1083,24 @@ return function (Router $router, Database $database): void {
             'deposits' => $database->fetchAll("SELECT d.*, u.email, u.first_name, u.last_name, a.account_number, s.code AS asset_code, s.symbol AS asset_symbol, s.scale AS asset_scale FROM deposit_requests d JOIN users u ON u.id = d.user_id JOIN accounts a ON a.id = d.account_id JOIN assets s ON s.id = a.asset_id ORDER BY CASE d.status WHEN 'pending' THEN 0 ELSE 1 END, d.created_at DESC LIMIT 300"),
             'usdRates' => $rates->ratesForAssets($assets),
         ]);
+    }, 'admin');
+
+    $router->get('/admin/deposits/{id}/receipt', static function (Request $request) use ($receipts, $audit): void {
+        $id = (string) $request->route('id');
+        try {
+            $receipt = $receipts->forAdmin($id);
+        } catch (RuntimeException $error) {
+            http_response_code(404);
+            echo '<!doctype html><html lang="en"><meta charset="utf-8"><title>Receipt not found</title><body><h1>Receipt not found</h1></body></html>';
+            return;
+        }
+        $audit->record('deposit.receipt_viewed', 'deposit_request', $id, null);
+        header('Content-Type: ' . $receipt['mime']);
+        header('Content-Disposition: inline; filename="' . addcslashes($receipt['name'], "\\\"") . '"');
+        header('X-Content-Type-Options: nosniff');
+        header('Cache-Control: private, no-store');
+        header('Content-Length: ' . (string) filesize($receipt['path']));
+        readfile($receipt['path']);
     }, 'admin');
 
     $router->post('/admin/deposits/{id}/decision', static function (Request $request) use ($banking, $audit, $attempt): never {
