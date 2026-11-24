@@ -208,6 +208,26 @@ $auth->updateCustomerByAdmin((string) $adminCreated['id'], ['email' => 'edited@t
 $check('blocking a customer revokes active sessions', $auth->sessionUser($createdSession) === null);
 $check('administrator cannot edit another administrator as a customer', $expectThrows(static fn () => $auth->updateCustomerByAdmin($adminId, ['email' => 'admin@test.local', 'first_name' => 'Ada', 'last_name' => 'Admin', 'status' => 'active']), 'not found'));
 
+// Self-registration collects the transaction PIN so a new customer can pay
+// immediately; administrator-created accounts leave it for the customer to set.
+$signupPin = static fn (string $email, string $pin, string $confirm) => $auth->register([
+    'email' => $email,
+    'password' => 'customer-password-123',
+    'first_name' => 'Pin',
+    'last_name' => 'Tester',
+    'pin' => $pin,
+    'pin_confirm' => $confirm,
+], true);
+$check('self-registration requires a transaction PIN', $expectThrows(static fn () => $signupPin('nopin@test.local', '', ''), 'transaction PIN'));
+$check('self-registration refuses a mismatched PIN confirmation', $expectThrows(static fn () => $signupPin('mismatch@test.local', '1234', '4321'), 'do not match'));
+$check('self-registration refuses a non-numeric PIN', $expectThrows(static fn () => $signupPin('badpin@test.local', '12ab', '12ab'), '4 to 6 digits'));
+$pinCustomer = $signupPin('signup-pin@test.local', '246810', '246810');
+$pinRow = $database->fetchOne('SELECT transaction_pin_hash FROM users WHERE id = ?', [(string) $pinCustomer['id']]);
+$check('self-registration stores a usable and hashed transaction PIN', $pinRow !== null && (string) $pinRow['transaction_pin_hash'] !== '246810' && password_verify('246810', (string) $pinRow['transaction_pin_hash']) && $auth->hasTransactionPin((string) $pinCustomer['id']) && $auth->verifyTransactionPin((string) $pinCustomer['id'], '246810'));
+$check('administrator-created customers start without a PIN', !$auth->hasTransactionPin((string) $adminCreated['id']));
+$registerViewSource = (string) file_get_contents($projectRoot . '/app/Views/auth/register.php');
+$check('registration form asks for a required transaction PIN', str_contains($registerViewSource, 'name="pin"') && str_contains($registerViewSource, 'name="pin_confirm"') && substr_count($registerViewSource, 'required') >= 4);
+
 // Customer deletion is reauthenticated, reasoned, and tombstones rather than
 // deleting the row that immutable ledger and audit history point at.
 $deletionCustomer = $register('delete-me@test.local');

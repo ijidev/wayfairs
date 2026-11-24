@@ -343,3 +343,18 @@ Date: 2026-11-18
   that records a `deposit.receipt_viewed` audit entry.
 - Existing deposits without a receipt are displayed as "Not attached"; the
   historical ledger is never rewritten.
+
+## WDR-026 — Self-registration collects the transaction PIN
+
+Date: 2026-11-24
+
+- The public sign-up form now requires a 4–6 digit transaction PIN and a matching
+  confirmation. The PIN is hashed with the same password hashing used elsewhere
+  and stored at account creation, so a verified customer can confirm payments
+  without a separate setup step.
+- Server-side validation lives in `AuthService::register()`, which takes an
+  explicit `$requirePin` flag. Only the public `/register` route requires it.
+  Administrator-created customers still start without a PIN and set one in
+  Security, because an administrator must not choose a customer's PIN.
+- Existing accounts are unchanged. Customers who have no PIN keep seeing the
+  Security prompt before they can send money.

@@ -152,7 +152,7 @@ return function (Router $router, Database $database): void {
 
     $router->post('/register', static function (Request $request) use ($auth, $mailer, $emailTemplates): never {
         try {
-            $user = $auth->register($request->allPost());
+            $user = $auth->register($request->allPost(), true);
             $rendered = $emailTemplates->render('registration', ['first_name' => (string) ($user['first_name'] ?? ''), 'site_url' => wayfairs_url('/')]);
             if ($rendered !== null && $mailer->isConfigured()) {
                 $mailer->send((string) $user['email'], $rendered['subject'], $rendered['body']);

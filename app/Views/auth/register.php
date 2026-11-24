@@ -17,6 +17,11 @@ declare(strict_types=1);
     <label>Email address<input type="email" name="email" autocomplete="username" required placeholder="you@example.com" /></label>
     <label>Phone number (optional)<input name="phone" autocomplete="tel" placeholder="+1 555 000 0000" /></label>
     <label>Password<input type="password" name="password" minlength="12" autocomplete="new-password" required placeholder="At least 12 characters" /><span class="hint">Use a strong, unique password of at least 12 characters.</span></label>
+    <div class="row">
+      <label>Transaction PIN<input type="password" name="pin" inputmode="numeric" pattern="[0-9]{4,6}" minlength="4" maxlength="6" autocomplete="off" required placeholder="4–6 digits" /></label>
+      <label>Confirm PIN<input type="password" name="pin_confirm" inputmode="numeric" pattern="[0-9]{4,6}" minlength="4" maxlength="6" autocomplete="off" required placeholder="Repeat PIN" /></label>
+    </div>
+    <span class="hint">Set the PIN you will use to confirm transfers, bill payments, swaps, and Wayfairs transfers. It is separate from your password and must be 4–6 digits.</span>
     <button class="btn full" type="submit">Create account <?= wayfairs_icon('arrow-right', 'btn-icon') ?></button>
   </form>
   <p class="hint" style="margin-top:1rem;text-align:center">Already have an account? <a href="<?= e(wayfairs_url('/login')) ?>">Sign in</a>.</p>

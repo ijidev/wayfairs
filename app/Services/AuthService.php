@@ -13,7 +13,12 @@ final class AuthService
     {
     }
 
-    public function register(array $input): array
+    /**
+     * Creates a customer account. Self-registration passes $requirePin = true so
+     * the account is usable for payments immediately; administrator-created
+     * customers have no PIN until the customer sets one in Security.
+     */
+    public function register(array $input, bool $requirePin = false): array
     {
         $email = $this->normalizeEmail((string) ($input['email'] ?? ''));
         if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
@@ -22,18 +27,31 @@ final class AuthService
         if (strlen((string) ($input['password'] ?? '')) < 12) {
             throw new \RuntimeException('Password must be at least 12 characters.');
         }
+        $pin = trim((string) ($input['pin'] ?? ''));
+        if ($pin === '' && $requirePin) {
+            throw new \RuntimeException('Choose a transaction PIN of 4 to 6 digits.');
+        }
+        if ($pin !== '') {
+            if (preg_match('/^[0-9]{4,6}$/', $pin) !== 1) {
+                throw new \RuntimeException('Choose a PIN of 4 to 6 digits.');
+            }
+            if (trim((string) ($input['pin_confirm'] ?? '')) !== $pin) {
+                throw new \RuntimeException('The two PIN entries do not match.');
+            }
+        }
         if ($this->database->fetchOne('SELECT id FROM users WHERE email_normalized = ?', [$email])) {
             throw new \RuntimeException('That email address is already registered.');
         }
         $id = Security::uuid();
         $this->database->execute(
-            'INSERT INTO users (id, role, email, email_normalized, password_hash, first_name, last_name, phone, status, email_verified_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+            'INSERT INTO users (id, role, email, email_normalized, password_hash, transaction_pin_hash, first_name, last_name, phone, status, email_verified_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
             [
                 $id,
                 'user',
                 $email,
                 $email,
                 Security::passwordHash((string) $input['password']),
+                $pin !== '' ? Security::passwordHash($pin) : null,
                 trim((string) ($input['first_name'] ?? '')),
                 trim((string) ($input['last_name'] ?? '')),
                 trim((string) ($input['phone'] ?? '')) ?: null,
